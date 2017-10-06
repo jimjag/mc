@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-// Package cmd stores all of the mc utilities
 package cmd
 
 import (
@@ -87,6 +86,7 @@ var findCmd = cli.Command{
 	Name:   "find",
 	Usage:  "Finds files which match the given set of parameters.",
 	Action: mainFind,
+	Before: setGlobalsFromContext,
 	Flags:  append(findFlags, globalFlags...),
 	CustomHelpTemplate: `NAME:
   {{.HelpName}} - {{.Usage}}
@@ -108,6 +108,20 @@ UNITS
    to units of days, weeks, months and years respectively. With the standard
    rate of conversion being 7 days in 1 week, 30 days in 1 month, and 365
    days in one year.
+
+FORMAT
+   Support string substitutions with special interpretations for following keywords.
+   Keywords supported if target is filesystem or object storage:
+
+      {}     --> Substitutes to full path.
+      {base} --> Substitutes to basename of path.
+      {dir}  --> Substitutes to dirname of the path.
+      {size} --> Substitutes to file size of the path.
+      {time} --> Substitutes to file modified time of the path.
+
+   Keywords supported if target is object storage:
+
+      {url} --> Substitutes to a shareable URL of the path.
 
 EXAMPLES:
    01. Find all files named foo from all buckets.
@@ -174,8 +188,6 @@ func mainFind(ctx *cli.Context) error {
 	// Additional command specific theme customization.
 	console.SetColor("Find", color.New(color.FgGreen, color.Bold))
 
-	var cErr error
-
 	checkFindSyntax(ctx)
 
 	args := ctx.Args()
@@ -184,13 +196,8 @@ func mainFind(ctx *cli.Context) error {
 		args = []string{"."}
 	}
 
-	for _, targetURL := range args {
-		var clnt Client
-		clnt, err := newClient(targetURL)
-		fatalIf(err.Trace(targetURL), "Unable to initialize `"+targetURL+"`")
+	clnt, err := newClient(args[0])
+	fatalIf(err.Trace(args...), "Unable to initialize `"+args[0]+"`")
 
-		DoFind(clnt, ctx)
-
-	}
-	return cErr
+	return doFind(args[0], clnt, ctx)
 }
