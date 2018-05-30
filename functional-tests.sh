@@ -32,6 +32,9 @@
 #
 ################################################################################
 
+# Force bytewise sorting for CLI tools
+LANG=C
+
 if [ -n "$MINT_MODE" ]; then
     if [ -z "${MINT_DATA_DIR+x}" ]; then
         echo "MINT_DATA_DIR not defined"
@@ -496,7 +499,7 @@ function test_find() {
     assert_success "$start_time" "${FUNCNAME[0]}" mc_cmd mb "${SERVER_ALIAS}/${bucket_name}"
     assert_success "$start_time" "${FUNCNAME[0]}" mc_cmd mirror "$DATA_DIR" "${SERVER_ALIAS}/${bucket_name}"
 
-    diff -bB <(ls "$DATA_DIR") <("${MC_CMD[@]}" --json find "${SERVER_ALIAS}/${bucket_name}" | jq -r .key | sed "s/${SERVER_ALIAS}\/${bucket_name}\///g") >/dev/null 2>&1
+    diff -bB <(ls "$DATA_DIR") <("${MC_CMD[@]}" --json find "${SERVER_ALIAS}/${bucket_name}/" | jq -r .key | sed "s/${SERVER_ALIAS}\/${bucket_name}\///g") >/dev/null 2>&1
     assert_success "$start_time" "${FUNCNAME[0]}" show_on_failure $? "mirror and list differs"
 
     assert_success "$start_time" "${FUNCNAME[0]}" mc_cmd rm --force --recursive "${SERVER_ALIAS}/${bucket_name}"
