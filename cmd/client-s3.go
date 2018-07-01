@@ -17,6 +17,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -795,9 +796,21 @@ func (c *s3Client) Remove(isIncomplete bool, contentCh <-chan *clientContent) <-
 // MakeBucket - make a new bucket.
 func (c *s3Client) MakeBucket(region string, ignoreExisting bool) *probe.Error {
 	bucket, object := c.url2BucketAndObject()
+	if bucket == "" {
+		return probe.NewError(BucketNameEmpty{})
+	}
+
 	if object != "" {
+		if strings.HasSuffix(object, "/") {
+			_, e := c.api.PutObject(bucket, object, bytes.NewReader([]byte("")), 0, minio.PutObjectOptions{})
+			if e != nil {
+				return probe.NewError(e)
+			}
+			return nil
+		}
 		return probe.NewError(BucketNameTopLevel{})
 	}
+
 	e := c.api.MakeBucket(bucket, region)
 	if e != nil {
 		// Ignore bucket already existing error when ignoreExisting flag is enabled
@@ -976,7 +989,21 @@ func (c *s3Client) Stat(isIncomplete, isFetchMeta bool, sseKey string) (*clientC
 		if objectStat.Err != nil {
 			return nil, probe.NewError(objectStat.Err)
 		}
-		if objectStat.Key == object {
+		if strings.HasSuffix(objectStat.Key, string(c.targetURL.Separator)) {
+			objectMetadata.URL = *c.targetURL
+			objectMetadata.Type = os.ModeDir
+
+			if isFetchMeta {
+				stat, err := c.getObjectStat(bucket, object, opts)
+				if err != nil {
+					return nil, err
+				}
+				objectMetadata.ETag = stat.ETag
+				objectMetadata.Metadata = stat.Metadata
+				objectMetadata.EncryptionHeaders = stat.EncryptionHeaders
+			}
+			return objectMetadata, nil
+		} else if objectStat.Key == object {
 			objectMetadata.URL = *c.targetURL
 			objectMetadata.Time = objectStat.LastModified
 			objectMetadata.Size = objectStat.Size
@@ -989,22 +1016,6 @@ func (c *s3Client) Stat(isIncomplete, isFetchMeta bool, sseKey string) (*clientC
 				if err != nil {
 					return nil, err
 				}
-				objectMetadata.Metadata = stat.Metadata
-				objectMetadata.EncryptionHeaders = stat.EncryptionHeaders
-			}
-			return objectMetadata, nil
-		}
-
-		if strings.HasSuffix(objectStat.Key, string(c.targetURL.Separator)) {
-			objectMetadata.URL = *c.targetURL
-			objectMetadata.Type = os.ModeDir
-
-			if isFetchMeta {
-				stat, err := c.getObjectStat(bucket, object, opts)
-				if err != nil {
-					return nil, err
-				}
-				objectMetadata.ETag = stat.ETag
 				objectMetadata.Metadata = stat.Metadata
 				objectMetadata.EncryptionHeaders = stat.EncryptionHeaders
 			}
