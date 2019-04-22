@@ -1,5 +1,5 @@
 /*
- * Minio Client (C) 2017 Minio, Inc.
+ * MinIO Client (C) 2017 MinIO, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -155,7 +155,7 @@ func statURL(targetURL string, isIncomplete, isRecursive bool, encKeyDB map[stri
 		}
 		url := targetAlias + getKey(content)
 
-		if !isRecursive && url != targetURL {
+		if !isRecursive && !strings.HasPrefix(url, targetURL) {
 			return nil, errTargetNotFound(targetURL)
 		}
 
