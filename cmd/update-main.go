@@ -450,6 +450,7 @@ func (s updateMessage) String() string {
 
 // JSON jsonified make bucket message.
 func (s updateMessage) JSON() string {
+	s.Status = "success"
 	updateJSONBytes, e := json.MarshalIndent(s, "", " ")
 	fatalIf(probe.NewError(e), "Unable to marshal into JSON.")
 
@@ -462,7 +463,9 @@ func mainUpdate(ctx *cli.Context) {
 	}
 
 	quiet := ctx.Bool("quiet") || ctx.GlobalBool("quiet")
-
+	if ctx.Bool("json") || ctx.GlobalBool("json") {
+		globalJSON = true
+	}
 	updateMsg, sha256Hex, _, latestReleaseTime, err := getUpdateInfo(10 * time.Second)
 	if err != nil {
 		errorIf(err, "Unable to update ‘mc’.")
