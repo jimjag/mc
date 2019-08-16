@@ -80,7 +80,7 @@ mc.exe --help
 ### Install from Source
 Source installation is intended only for developers and advanced users. `mc update` command does not support update notifications for source based installations. Please download official releases from https://min.io/download/#minio-client.
 
-If you do not have a working Golang environment, please follow [How to install Golang](https://docs.min.io/docs/how-to-install-golang).
+If you do not have a working Golang environment, please follow [How to install Golang](https://golang.org/doc/install).
 
 ```
 go get -d github.com/minio/mc
@@ -225,7 +225,7 @@ mc: <DEBUG> Response Time:  1.220112837s
 ```
 
 ### Option [--json]
-JSON option enables parseable output in JSON format.
+JSON option enables parseable output in [JSON lines](http://jsonlines.org/) format.
 
 *Example: List all buckets from MinIO play service.*
 
@@ -860,7 +860,7 @@ LEGEND:
 ```
 
 ### Option [--json]
-JSON option enables parseable output in JSON format.
+JSON option enables parseable output in [JSON lines](http://jsonlines.org/) format.
 
 *Example: diff json output.*
 
