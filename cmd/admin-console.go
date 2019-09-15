@@ -34,7 +34,7 @@ const logTimeFormat string = "15:04:05 MST 01/02/2006"
 var adminConsoleFlags = []cli.Flag{
 	cli.IntFlag{
 		Name:  "limit, l",
-		Usage: "Show last n log entries",
+		Usage: "show last n log entries",
 		Value: 10,
 	},
 }
@@ -47,20 +47,20 @@ var adminConsoleCmd = cli.Command{
 	Flags:           append(adminConsoleFlags, globalFlags...),
 	HideHelpCommand: true,
 	CustomHelpTemplate: `NAME:
-	  {{.HelpName}} - {{.Usage}}
-  
+  {{.HelpName}} - {{.Usage}}
+
 USAGE:
-	{{.HelpName}} [FLAGS] TARGET
+  {{.HelpName}} [FLAGS] TARGET [NODENAME]
 
 FLAGS:
-	{{range .VisibleFlags}}{{.}}
-	{{end}}
+  {{range .VisibleFlags}}{{.}}
+  {{end}}
 EXAMPLES:
-	1. Show console logs for a MinIO server with alias 'play'
-		$ {{.HelpName}} play
+  1. Show console logs for a MinIO server with alias 'play'
+     $ {{.HelpName}} play
 
-	2. Show last 5 log entries for node 'node1' on MinIO server with alias 'cluster1'
-		$ {{.HelpName}} cluster1 node1 --limit 5
+  2. Show last 5 log entries for node 'node1' on MinIO server with alias 'cluster1'
+     $ {{.HelpName}} --limit 5 cluster1 node1
 `,
 }
 
@@ -82,6 +82,13 @@ func (l logMessage) JSON() string {
 
 	return string(logJSON)
 
+}
+func getLogTime(lt string) string {
+	tm, err := time.Parse(time.RFC3339Nano, lt)
+	if err != nil {
+		return lt
+	}
+	return tm.Format(logTimeFormat)
 }
 
 // String - return colorized loginfo as string.
@@ -105,11 +112,17 @@ func (l logMessage) String() string {
 		hostStr = fmt.Sprintf("%s ", colorizedNodeName(l.NodeName))
 	}
 	fmt.Fprintf(b, "\n%s %s", hostStr, console.Colorize("Api", apiString))
-	fmt.Fprintf(b, "\n%s Time: %s", hostStr, time.Now().Format(logTimeFormat))
+	fmt.Fprintf(b, "\n%s Time: %s", hostStr, getLogTime(l.Time))
 	fmt.Fprintf(b, "\n%s DeploymentID: %s", hostStr, l.DeploymentID)
-	fmt.Fprintf(b, "\n%s RequestID: %s", hostStr, l.RequestID)
-	fmt.Fprintf(b, "\n%s RemoteHost: %s", hostStr, l.RemoteHost)
-	fmt.Fprintf(b, "\n%s UserAgent: %s", hostStr, l.UserAgent)
+	if l.RequestID != "" {
+		fmt.Fprintf(b, "\n%s RequestID: %s", hostStr, l.RequestID)
+	}
+	if l.RemoteHost != "" {
+		fmt.Fprintf(b, "\n%s RemoteHost: %s", hostStr, l.RemoteHost)
+	}
+	if l.UserAgent != "" {
+		fmt.Fprintf(b, "\n%s UserAgent: %s", hostStr, l.UserAgent)
+	}
 	fmt.Fprintf(b, "\n%s Error: %s", hostStr, msg)
 
 	for key, value := range l.Trace.Variables {
@@ -121,8 +134,8 @@ func (l logMessage) String() string {
 		fmt.Fprintf(b, "\n%s %8v: %s", hostStr, traceLength-i, element)
 
 	}
-
-	return b.String()
+	logMsg := strings.TrimPrefix(b.String(), "\n")
+	return fmt.Sprintf("%s\n", logMsg)
 }
 
 // mainAdminConsole - the entry function of console command
@@ -144,7 +157,7 @@ func mainAdminConsole(ctx *cli.Context) error {
 			fatalIf(errInvalidArgument().Trace(ctx.Args()...), "please set a proper limit, for example: '--limit 5' to display last 5 logs, omit this flag to display all available logs")
 		}
 	}
-	// Create a new Minio Admin Client
+	// Create a new MinIO Admin Client
 	client, err := newAdminClient(aliasedURL)
 	if err != nil {
 		fatalIf(err.Trace(aliasedURL), "Cannot initialize admin client.")
