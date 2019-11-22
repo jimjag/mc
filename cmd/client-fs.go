@@ -37,6 +37,7 @@ import (
 	"github.com/minio/mc/pkg/hookreader"
 	"github.com/minio/mc/pkg/ioutils"
 	"github.com/minio/mc/pkg/probe"
+	minio "github.com/minio/minio-go/v6"
 	"github.com/minio/minio-go/v6/pkg/encrypt"
 )
 
@@ -67,11 +68,11 @@ func fsNew(path string) (Client, *probe.Error) {
 	}, nil
 }
 
-func isNotSupported(err error) bool {
-	if err == nil {
+func isNotSupported(e error) bool {
+	if e == nil {
 		return false
 	}
-	errno := err.(*xattr.Error)
+	errno := e.(*xattr.Error)
 	if errno == nil {
 		return false
 	}
@@ -82,13 +83,13 @@ func isNotSupported(err error) bool {
 
 // isIgnoredFile returns true if 'filename' is on the exclude list.
 func isIgnoredFile(filename string) bool {
-	matchFile := path.Base(filename)
+	matchFile := filepath.Base(filename)
 
 	// OS specific ignore list.
 	for _, ignoredFile := range ignoreFiles[runtime.GOOS] {
-		matched, err := filepath.Match(ignoredFile, matchFile)
-		if err != nil {
-			panic(err)
+		matched, e := filepath.Match(ignoredFile, matchFile)
+		if e != nil {
+			panic(e)
 		}
 		if matched {
 			return true
@@ -97,9 +98,9 @@ func isIgnoredFile(filename string) bool {
 
 	// Default ignore list for all OSes.
 	for _, ignoredFile := range ignoreFiles["default"] {
-		matched, err := filepath.Match(ignoredFile, matchFile)
-		if err != nil {
-			panic(err)
+		matched, e := filepath.Match(ignoredFile, matchFile)
+		if e != nil {
+			panic(e)
 		}
 		if matched {
 			return true
@@ -342,46 +343,55 @@ func (f *fsClient) put(reader io.Reader, size int64, metadata map[string][]strin
 		}
 
 		if len(metadata["mc-attrs"]) != 0 {
-			attr, err := parseAttribute(metadata["mc-attrs"][0])
-			if err != nil {
-				return totalWritten, probe.NewError(err)
+			attr, e := parseAttribute(metadata["mc-attrs"][0])
+			if e != nil {
+				return totalWritten, probe.NewError(e)
 			}
 
-			mode, err := strconv.ParseUint(attr["mode"], 10, 32)
-			if err != nil {
-				return totalWritten, probe.NewError(err)
+			mode, e := strconv.ParseUint(attr["mode"], 10, 32)
+			if e != nil {
+				return totalWritten, probe.NewError(e)
 			}
+
 			// Change the mode of file
-			if err := os.Chmod(objectPath, os.FileMode(mode)); err != nil {
-				return totalWritten, probe.NewError(err)
+			if e := os.Chmod(objectPath, os.FileMode(mode)); e != nil {
+				if !os.IsPermission(e) {
+					return totalWritten, probe.NewError(e)
+				}
 			}
 
-			uid, err := strconv.Atoi(attr["uid"])
-			if err != nil {
-				return totalWritten, probe.NewError(err)
+			uid, e := strconv.Atoi(attr["uid"])
+			if e != nil {
+				return totalWritten, probe.NewError(e)
 			}
 
-			gid, err := strconv.Atoi(attr["gid"])
-			if err != nil {
-				return totalWritten, probe.NewError(err)
+			gid, e := strconv.Atoi(attr["gid"])
+			if e != nil {
+				return totalWritten, probe.NewError(e)
 			}
+
 			// Change the owner
-			if err := os.Chown(objectPath, uid, gid); err != nil {
-				return totalWritten, probe.NewError(err)
+			if e := os.Chown(objectPath, uid, gid); e != nil {
+				if !os.IsPermission(e) {
+					return totalWritten, probe.NewError(e)
+				}
 			}
 
-			atime, err := strconv.ParseInt(attr["atime"], 10, 64)
-			if err != nil {
-				return totalWritten, probe.NewError(err)
+			atime, e := strconv.ParseInt(attr["atime"], 10, 64)
+			if e != nil {
+				return totalWritten, probe.NewError(e)
 			}
 
-			ctime, err := strconv.ParseInt(attr["ctime"], 10, 64)
-			if err != nil {
-				return totalWritten, probe.NewError(err)
+			ctime, e := strconv.ParseInt(attr["ctime"], 10, 64)
+			if e != nil {
+				return totalWritten, probe.NewError(e)
 			}
+
 			// Change the access, modify and change time
-			if err := os.Chtimes(objectPath, time.Unix(atime, 0), time.Unix(ctime, 0)); err != nil {
-				return totalWritten, probe.NewError(err)
+			if e := os.Chtimes(objectPath, time.Unix(atime, 0), time.Unix(ctime, 0)); e != nil {
+				if !os.IsPermission(e) {
+					return totalWritten, probe.NewError(e)
+				}
 			}
 
 		}
@@ -504,11 +514,11 @@ func isSysErrNotEmpty(err error) bool {
 // until it finds one with files in it. Returns nil for a non-empty directory.
 func deleteFile(deletePath string) error {
 	// Attempt to remove path.
-	if err := os.Remove((deletePath)); err != nil {
-		if isSysErrNotEmpty(err) {
+	if e := os.Remove(deletePath); e != nil {
+		if isSysErrNotEmpty(e) {
 			return nil
 		}
-		return err
+		return e
 	}
 
 	// Trailing slash is removed when found to ensure
@@ -537,15 +547,15 @@ func (f *fsClient) Remove(isIncomplete, isRemoveBucket bool, contentCh <-chan *c
 			if isIncomplete {
 				name += partSuffix
 			}
-			if err := deleteFile(name); err != nil {
-				if os.IsPermission(err) {
+			if e := deleteFile(name); e != nil {
+				if os.IsPermission(e) {
 					// Ignore permission error.
 					errorCh <- probe.NewError(PathInsufficientPermission{Path: content.URL.Path})
-				} else if os.IsNotExist(err) && isRemoveBucket {
+				} else if os.IsNotExist(e) && isRemoveBucket {
 					// ignore PathNotFound for dir removal.
 					return
 				} else {
-					errorCh <- probe.NewError(err)
+					errorCh <- probe.NewError(e)
 					return
 				}
 			}
@@ -556,18 +566,18 @@ func (f *fsClient) Remove(isIncomplete, isRemoveBucket bool, contentCh <-chan *c
 }
 
 // List - list files and folders.
-func (f *fsClient) List(isRecursive, isIncomplete bool, showDir DirOpt) <-chan *clientContent {
+func (f *fsClient) List(isRecursive, isIncomplete, isMetadata bool, showDir DirOpt) <-chan *clientContent {
 	contentCh := make(chan *clientContent)
 	filteredCh := make(chan *clientContent)
 
 	if isRecursive {
 		if showDir == DirNone {
-			go f.listRecursiveInRoutine(contentCh)
+			go f.listRecursiveInRoutine(contentCh, isMetadata)
 		} else {
-			go f.listDirOpt(contentCh, isIncomplete, showDir)
+			go f.listDirOpt(contentCh, isIncomplete, isMetadata, showDir)
 		}
 	} else {
-		go f.listInRoutine(contentCh)
+		go f.listInRoutine(contentCh, isMetadata)
 	}
 
 	// This function filters entries from any  listing go routine
@@ -700,7 +710,7 @@ func (f *fsClient) listPrefixes(prefix string, contentCh chan<- *clientContent) 
 	}
 }
 
-func (f *fsClient) listInRoutine(contentCh chan<- *clientContent) {
+func (f *fsClient) listInRoutine(contentCh chan<- *clientContent, isMetadata bool) {
 	// close the channel when the function returns.
 	defer close(contentCh)
 
@@ -794,7 +804,7 @@ func (f *fsClient) listInRoutine(contentCh chan<- *clientContent) {
 }
 
 // List files recursively using non-recursive mode.
-func (f *fsClient) listDirOpt(contentCh chan *clientContent, isIncomplete bool, dirOpt DirOpt) {
+func (f *fsClient) listDirOpt(contentCh chan *clientContent, isIncomplete bool, isMetadata bool, dirOpt DirOpt) {
 	defer close(contentCh)
 
 	// Trim trailing / or \.
@@ -807,14 +817,18 @@ func (f *fsClient) listDirOpt(contentCh chan *clientContent, isIncomplete bool, 
 	// Closure function reads currentPath and sends to contentCh. If a directory is found, it lists the directory content recursively.
 	var listDir func(currentPath string) bool
 	listDir = func(currentPath string) (isStop bool) {
-		files, err := readDir(currentPath)
-		if err != nil {
-			if os.IsPermission(err) {
-				contentCh <- &clientContent{Err: probe.NewError(PathInsufficientPermission{Path: currentPath})}
+		files, e := readDir(currentPath)
+		if e != nil {
+			if os.IsPermission(e) {
+				contentCh <- &clientContent{
+					Err: probe.NewError(PathInsufficientPermission{
+						Path: currentPath,
+					}),
+				}
 				return false
 			}
 
-			contentCh <- &clientContent{Err: probe.NewError(err)}
+			contentCh <- &clientContent{Err: probe.NewError(e)}
 			return true
 		}
 
@@ -860,7 +874,7 @@ func (f *fsClient) listDirOpt(contentCh chan *clientContent, isIncomplete bool, 
 	}
 }
 
-func (f *fsClient) listRecursiveInRoutine(contentCh chan *clientContent) {
+func (f *fsClient) listRecursiveInRoutine(contentCh chan *clientContent, isMetadata bool) {
 	// close channels upon return.
 	defer close(contentCh)
 	var dirName string
@@ -997,6 +1011,16 @@ func (f *fsClient) MakeBucket(region string, ignoreExisting, withLock bool) *pro
 		return probe.NewError(e)
 	}
 	return nil
+}
+
+// Set object lock configuration of bucket.
+func (f *fsClient) SetObjectLockConfig(mode *minio.RetentionMode, validity *uint, unit *minio.ValidityUnit) *probe.Error {
+	return probe.NewError(APINotImplemented{API: "SetObjectLockConfig", APIType: "filesystem"})
+}
+
+// Get object lock configuration of bucket.
+func (f *fsClient) GetObjectLockConfig() (mode *minio.RetentionMode, validity *uint, unit *minio.ValidityUnit, perr *probe.Error) {
+	return nil, nil, nil, probe.NewError(APINotImplemented{API: "GetObjectLockConfig", APIType: "filesystem"})
 }
 
 // GetAccessRules - unsupported API
