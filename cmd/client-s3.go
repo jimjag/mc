@@ -576,12 +576,90 @@ func (c *s3Client) Select(expression string, sse encrypt.ServerSide, selOpts Sel
 	return reader, nil
 }
 
+func (c *s3Client) watchOneBucket(bucket, prefix, suffix string, events []string, doneCh chan struct{}, eventChan chan EventInfo, errorChan chan *probe.Error) {
+	// Start listening on all bucket events.
+	eventsCh := c.api.ListenBucketNotification(bucket, prefix, suffix, events, doneCh)
+
+	for notificationInfo := range eventsCh {
+		if notificationInfo.Err != nil {
+			if nErr, ok := notificationInfo.Err.(minio.ErrorResponse); ok && nErr.Code == "APINotSupported" {
+				errorChan <- probe.NewError(APINotImplemented{
+					API:     "Watch",
+					APIType: c.targetURL.Scheme + "://" + c.targetURL.Host,
+				})
+				return
+			}
+			errorChan <- probe.NewError(notificationInfo.Err)
+		}
+
+		for _, record := range notificationInfo.Records {
+			bucketName := record.S3.Bucket.Name
+			key, e := url.QueryUnescape(record.S3.Object.Key)
+			if e != nil {
+				errorChan <- probe.NewError(e)
+				continue
+			}
+
+			u := *c.targetURL
+			u.Path = path.Join(string(u.Separator), bucketName, key)
+			if strings.HasPrefix(record.EventName, "s3:ObjectCreated:") {
+				if strings.HasPrefix(record.EventName, "s3:ObjectCreated:PutRetention") {
+					eventChan <- EventInfo{
+						Time:      record.EventTime,
+						Size:      record.S3.Object.Size,
+						Path:      u.String(),
+						Type:      EventCreatePutRetention,
+						Host:      record.Source.Host,
+						Port:      record.Source.Port,
+						UserAgent: record.Source.UserAgent,
+					}
+				} else {
+					eventChan <- EventInfo{
+						Time:      record.EventTime,
+						Size:      record.S3.Object.Size,
+						Path:      u.String(),
+						Type:      EventCreate,
+						Host:      record.Source.Host,
+						Port:      record.Source.Port,
+						UserAgent: record.Source.UserAgent,
+					}
+				}
+			} else if strings.HasPrefix(record.EventName, "s3:ObjectRemoved:") {
+				eventChan <- EventInfo{
+					Time:      record.EventTime,
+					Path:      u.String(),
+					Type:      EventRemove,
+					Host:      record.Source.Host,
+					Port:      record.Source.Port,
+					UserAgent: record.Source.UserAgent,
+				}
+			} else if record.EventName == minio.ObjectAccessedGet {
+				eventChan <- EventInfo{
+					Time:      record.EventTime,
+					Size:      record.S3.Object.Size,
+					Path:      u.String(),
+					Type:      EventAccessedRead,
+					Host:      record.Source.Host,
+					Port:      record.Source.Port,
+					UserAgent: record.Source.UserAgent,
+				}
+			} else if record.EventName == minio.ObjectAccessedHead {
+				eventChan <- EventInfo{
+					Time:      record.EventTime,
+					Size:      record.S3.Object.Size,
+					Path:      u.String(),
+					Type:      EventAccessedStat,
+					Host:      record.Source.Host,
+					Port:      record.Source.Port,
+					UserAgent: record.Source.UserAgent,
+				}
+			}
+		}
+	}
+}
+
 // Start watching on all bucket events for a given account ID.
 func (c *s3Client) Watch(params watchParams) (*watchObject, *probe.Error) {
-	eventChan := make(chan EventInfo)
-	errorChan := make(chan *probe.Error)
-	doneChan := make(chan bool)
-
 	// Extract bucket and object.
 	bucket, object := c.url2BucketAndObject()
 
@@ -606,105 +684,53 @@ func (c *s3Client) Watch(params watchParams) (*watchObject, *probe.Error) {
 		params.prefix = object
 	}
 
-	doneCh := make(chan struct{})
-
-	// wait for doneChan to close the other channels
-	go func() {
-		<-doneChan
-
-		close(doneCh)
-		close(eventChan)
-		close(errorChan)
-	}()
-
-	// Start listening on all bucket events.
-	eventsCh := c.api.ListenBucketNotification(bucket, params.prefix, params.suffix, events, doneCh)
-
-	wo := &watchObject{
-		eventInfoChan: eventChan,
-		errorChan:     errorChan,
-		doneChan:      doneChan,
+	// The list of buckets to watch
+	var buckets []string
+	if bucket == "" {
+		bkts, err := c.api.ListBuckets()
+		if err != nil {
+			return nil, probe.NewError(err)
+		}
+		for _, b := range bkts {
+			buckets = append(buckets, b.Name)
+		}
+	} else {
+		buckets = append(buckets, bucket)
 	}
 
-	// wait for events to occur and sent them through the eventChan and errorChan
+	wo := &watchObject{
+		eventInfoChan: make(chan EventInfo),
+		errorChan:     make(chan *probe.Error),
+		doneChan:      make(chan bool),
+	}
+
+	// A done channel for each bucket listening API call
+	doneChs := make([]chan struct{}, len(buckets))
+	for i := range doneChs {
+		doneChs[i] = make(chan struct{})
+	}
+
 	go func() {
-		defer wo.Close()
-		for notificationInfo := range eventsCh {
-			if notificationInfo.Err != nil {
-				if nErr, ok := notificationInfo.Err.(minio.ErrorResponse); ok && nErr.Code == "APINotSupported" {
-					errorChan <- probe.NewError(APINotImplemented{
-						API:     "Watch",
-						APIType: c.targetURL.Scheme + "://" + c.targetURL.Host,
-					})
-					return
-				}
-				errorChan <- probe.NewError(notificationInfo.Err)
-			}
-
-			for _, record := range notificationInfo.Records {
-				bucketName := record.S3.Bucket.Name
-				key, e := url.QueryUnescape(record.S3.Object.Key)
-				if e != nil {
-					errorChan <- probe.NewError(e)
-					continue
-				}
-
-				u := *c.targetURL
-				u.Path = path.Join(string(u.Separator), bucketName, key)
-				if strings.HasPrefix(record.EventName, "s3:ObjectCreated:") {
-					if strings.HasPrefix(record.EventName, "s3:ObjectCreated:PutRetention") {
-						eventChan <- EventInfo{
-							Time:      record.EventTime,
-							Size:      record.S3.Object.Size,
-							Path:      u.String(),
-							Type:      EventCreatePutRetention,
-							Host:      record.Source.Host,
-							Port:      record.Source.Port,
-							UserAgent: record.Source.UserAgent,
-						}
-					} else {
-						eventChan <- EventInfo{
-							Time:      record.EventTime,
-							Size:      record.S3.Object.Size,
-							Path:      u.String(),
-							Type:      EventCreate,
-							Host:      record.Source.Host,
-							Port:      record.Source.Port,
-							UserAgent: record.Source.UserAgent,
-						}
-					}
-				} else if strings.HasPrefix(record.EventName, "s3:ObjectRemoved:") {
-					eventChan <- EventInfo{
-						Time:      record.EventTime,
-						Path:      u.String(),
-						Type:      EventRemove,
-						Host:      record.Source.Host,
-						Port:      record.Source.Port,
-						UserAgent: record.Source.UserAgent,
-					}
-				} else if record.EventName == minio.ObjectAccessedGet {
-					eventChan <- EventInfo{
-						Time:      record.EventTime,
-						Size:      record.S3.Object.Size,
-						Path:      u.String(),
-						Type:      EventAccessedRead,
-						Host:      record.Source.Host,
-						Port:      record.Source.Port,
-						UserAgent: record.Source.UserAgent,
-					}
-				} else if record.EventName == minio.ObjectAccessedHead {
-					eventChan <- EventInfo{
-						Time:      record.EventTime,
-						Size:      record.S3.Object.Size,
-						Path:      u.String(),
-						Type:      EventAccessedStat,
-						Host:      record.Source.Host,
-						Port:      record.Source.Port,
-						UserAgent: record.Source.UserAgent,
-					}
-				}
-			}
+		// Stop all listening bucket API calls when
+		// receiving the main done call
+		<-wo.doneChan
+		for i := range doneChs {
+			close(doneChs[i])
 		}
+	}()
+
+	var wg sync.WaitGroup
+	for i, bucket := range buckets {
+		wg.Add(1)
+		go func(bucket string, doneCh chan struct{}) {
+			c.watchOneBucket(bucket, params.prefix, params.suffix, events, doneCh, wo.Events(), wo.Errors())
+			wg.Done()
+		}(bucket, doneChs[i])
+	}
+
+	go func() {
+		wg.Wait()
+		wo.Close()
 	}()
 
 	return wo, nil
@@ -912,6 +938,10 @@ func (c *s3Client) removeIncompleteObjects(bucket string, objectsCh <-chan strin
 	}()
 
 	return removeObjectErrorCh
+}
+
+func (c *s3Client) AddUserAgent(app string, version string) {
+	c.api.SetAppInfo(app, version)
 }
 
 // Remove - remove object or bucket(s).
@@ -1471,7 +1501,7 @@ func (c *s3Client) listIncompleteInRoutine(contentCh chan *clientContent) {
 					contentCh <- &clientContent{
 						Err: probe.NewError(object.Err),
 					}
-					continue
+					return
 				}
 				content := &clientContent{}
 				url := *c.targetURL
@@ -1499,7 +1529,7 @@ func (c *s3Client) listIncompleteInRoutine(contentCh chan *clientContent) {
 				contentCh <- &clientContent{
 					Err: probe.NewError(object.Err),
 				}
-				continue
+				return
 			}
 			content := &clientContent{}
 			url := *c.targetURL
@@ -1542,7 +1572,7 @@ func (c *s3Client) listIncompleteRecursiveInRoutine(contentCh chan *clientConten
 					contentCh <- &clientContent{
 						Err: probe.NewError(object.Err),
 					}
-					continue
+					return
 				}
 				url := *c.targetURL
 				url.Path = c.joinPath(bucket.Name, object.Key)
@@ -1561,7 +1591,7 @@ func (c *s3Client) listIncompleteRecursiveInRoutine(contentCh chan *clientConten
 				contentCh <- &clientContent{
 					Err: probe.NewError(object.Err),
 				}
-				continue
+				return
 			}
 			url := *c.targetURL
 			// Join bucket and incoming object key.
@@ -1917,27 +1947,26 @@ func (c *s3Client) listRecursiveInRoutine(contentCh chan *clientContent, metadat
 		for _, bucket := range buckets {
 			isRecursive := true
 			for object := range c.listObjectWrapper(bucket.Name, o, isRecursive, nil, metadata) {
-				// Return error if we encountered glacier object and continue.
-				if object.StorageClass == s3StorageClassGlacier {
-					contentCh <- &clientContent{
-						Err: probe.NewError(ObjectOnGlacier{object.Key}),
-					}
-					continue
-				}
 				if object.Err != nil {
 					contentCh <- &clientContent{
 						Err: probe.NewError(object.Err),
 					}
-					continue
+					return
 				}
 				content := &clientContent{}
 				objectURL := *c.targetURL
 				objectURL.Path = c.joinPath(bucket.Name, object.Key)
 				content.URL = objectURL
+				content.StorageClass = object.StorageClass
 				content.Size = object.Size
 				content.ETag = object.ETag
 				content.Time = object.LastModified
 				content.Type = os.FileMode(0664)
+				content.Expires = object.Expires
+				content.UserMetadata = map[string]string{}
+				for k, v := range object.UserMetadata {
+					content.UserMetadata[k] = v
+				}
 				contentCh <- content
 			}
 		}
@@ -1948,7 +1977,7 @@ func (c *s3Client) listRecursiveInRoutine(contentCh chan *clientContent, metadat
 				contentCh <- &clientContent{
 					Err: probe.NewError(object.Err),
 				}
-				continue
+				return
 			}
 			content := &clientContent{}
 			url := *c.targetURL
