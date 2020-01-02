@@ -28,8 +28,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/minio/cli"
 	json "github.com/minio/mc/pkg/colorjson"
-	"github.com/minio/mc/pkg/console"
 	"github.com/minio/mc/pkg/probe"
+	"github.com/minio/minio/pkg/console"
 	"github.com/minio/minio/pkg/madmin"
 )
 
@@ -176,8 +176,8 @@ func (u clusterStruct) String() (msg string) {
 	usedTotal := humanize.IBytes(uint64(u.Info.Usage.Size))
 	if u.Info.Buckets.Count > 0 {
 		msg += fmt.Sprintf("%s Used, %s, %s", usedTotal,
-			english.Plural(u.Info.Buckets.Count, "Bucket", ""),
-			english.Plural(u.Info.Objects.Count, "Object", ""))
+			english.Plural(int(u.Info.Buckets.Count), "Bucket", ""),
+			english.Plural(int(u.Info.Objects.Count), "Object", ""))
 	}
 	if backendType != "FS" {
 		// Summary on total no of online and total

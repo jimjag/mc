@@ -29,8 +29,8 @@ import (
 
 	"github.com/cheggaaa/pb"
 	"github.com/minio/cli"
-	"github.com/minio/mc/pkg/console"
 	"github.com/minio/mc/pkg/probe"
+	"github.com/minio/minio/pkg/console"
 	"github.com/minio/minio/pkg/words"
 	"github.com/pkg/profile"
 
@@ -332,7 +332,6 @@ var appCmds = []cli.Command{
 	adminCmd,
 	configCmd,
 	updateCmd,
-	versionCmd,
 }
 
 func registerApp(name string) *cli.App {
