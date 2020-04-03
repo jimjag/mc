@@ -171,7 +171,7 @@ func probeS3Signature(accessKey, secretKey, url string) (string, *probe.Error) {
 		Debug:     globalDebug,
 	}
 
-	s3Client, err := s3New(s3Config)
+	s3Client, err := S3New(s3Config)
 	if err != nil {
 		return "", err
 	}
@@ -183,7 +183,7 @@ func probeS3Signature(accessKey, secretKey, url string) (string, *probe.Error) {
 		default:
 			// Attempt with signature v2, since v4 seem to have failed.
 			s3Config.Signature = "s3v2"
-			s3Client, err = s3New(s3Config)
+			s3Client, err = S3New(s3Config)
 			if err != nil {
 				return "", err
 			}
@@ -205,7 +205,7 @@ func probeS3Signature(accessKey, secretKey, url string) (string, *probe.Error) {
 // signature auto-probe when needed.
 func BuildS3Config(url, accessKey, secretKey, api, lookup string) (*Config, *probe.Error) {
 
-	s3Config := newS3Config(url, &hostConfigV9{
+	s3Config := NewS3Config(url, &hostConfigV9{
 		AccessKey: accessKey,
 		SecretKey: secretKey,
 		URL:       url,
