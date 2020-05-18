@@ -17,8 +17,7 @@
 package cmd
 
 import (
-	"os"
-
+	"github.com/fatih/color"
 	"github.com/minio/cli"
 	json "github.com/minio/mc/pkg/colorjson"
 	"github.com/minio/mc/pkg/probe"
@@ -27,12 +26,12 @@ import (
 
 var tagRemoveCmd = cli.Command{
 	Name:   "remove",
-	Usage:  "remove tags assigned to an object",
+	Usage:  "remove tags assigned to a bucket or an object",
 	Action: mainRemoveTag,
 	Before: setGlobalsFromContext,
 	Flags:  globalFlags,
-	CustomHelpTemplate: `Name:
-	{{.HelpName}} - {{.Usage}}
+	CustomHelpTemplate: `NAME:
+  {{.HelpName}} - {{.Usage}}
 
 USAGE:
   {{.HelpName}} [COMMAND FLAGS] TARGET
@@ -41,12 +40,14 @@ FLAGS:
   {{range .VisibleFlags}}{{.}}
   {{end}}
 DESCRIPTION:
-   Remove tags assigned to an object .
+  Remove tags assigned to a bucket or an object.
 
 EXAMPLES:
   1. Remove the tags assigned to an object.
-     {{.Prompt}} {{.HelpName}} s3/testbucket/testobject
+     {{.Prompt}} {{.HelpName}} myminio/testbucket/testobject
 
+  2. Remove the tags assigned to a bucket.
+     {{.Prompt}} {{.HelpName}} play/testbucket
 `,
 }
 
@@ -58,7 +59,7 @@ type tagRemoveMessage struct {
 
 // tagRemoveMessage console colorized output.
 func (t tagRemoveMessage) String() string {
-	return console.Colorize(tagPrintMsgTheme, "Tags removed for "+t.Name+".")
+	return console.Colorize("Remove", "Tags removed for "+t.Name+".")
 }
 
 // JSON tagRemoveMessage.
@@ -69,28 +70,24 @@ func (t tagRemoveMessage) JSON() string {
 }
 func checkRemoveTagSyntax(ctx *cli.Context) {
 	if len(ctx.Args()) != 1 {
-		cli.ShowCommandHelp(ctx, "remove")
-		os.Exit(globalErrorExitStatus)
+		cli.ShowCommandHelpAndExit(ctx, "remove", globalErrorExitStatus)
 	}
 }
 
 func mainRemoveTag(ctx *cli.Context) error {
 	checkRemoveTagSyntax(ctx)
-	setTagListColorScheme()
-	var pErr *probe.Error
-	objectURL := ctx.Args().Get(0)
-	clnt, pErr := newClient(objectURL)
-	fatalIf(pErr.Trace(objectURL), "Unable to initialize target "+objectURL+".")
-	pErr = clnt.DeleteObjectTagging()
-	if pErr != nil {
-		errorIf(pErr.Trace(objectURL), "Failed to remove tags for "+objectURL)
-		return exitStatus(globalErrorExitStatus)
-	}
+
+	console.SetColor("Remove", color.New(color.FgGreen))
+
+	targetURL := ctx.Args().Get(0)
+	clnt, pErr := newClient(targetURL)
+	fatalIf(pErr, "Unable to initialize target "+targetURL)
+	pErr = clnt.DeleteTags()
+	fatalIf(pErr, "Unable to remove tags for "+targetURL)
 
 	printMsg(tagRemoveMessage{
 		Status: "success",
-		Name:   objectURL,
+		Name:   targetURL,
 	})
-
 	return nil
 }

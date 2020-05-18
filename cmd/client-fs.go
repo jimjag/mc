@@ -34,13 +34,14 @@ import (
 	"github.com/pkg/xattr"
 	"github.com/rjeczalik/notify"
 
+	"github.com/minio/mc/cmd/ilm"
 	"github.com/minio/mc/pkg/disk"
 	"github.com/minio/mc/pkg/hookreader"
 	"github.com/minio/mc/pkg/ioutils"
 	"github.com/minio/mc/pkg/probe"
 	minio "github.com/minio/minio-go/v6"
 	"github.com/minio/minio-go/v6/pkg/encrypt"
-	"github.com/minio/minio/pkg/bucket/object/tagging"
+	"github.com/minio/minio-go/v6/pkg/tags"
 )
 
 // filesystem client
@@ -1104,15 +1105,15 @@ func (f *fsClient) AddUserAgent(_, _ string) {
 }
 
 // Get Object Tags
-func (f *fsClient) GetObjectTagging() (tagging.Tagging, *probe.Error) {
-	return tagging.Tagging{}, probe.NewError(APINotImplemented{
+func (f *fsClient) GetTags() (*tags.Tags, *probe.Error) {
+	return nil, probe.NewError(APINotImplemented{
 		API:     "GetObjectTagging",
 		APIType: "filesystem",
 	})
 }
 
 // Set Object tags
-func (f *fsClient) SetObjectTagging(tagMap map[string]string) *probe.Error {
+func (f *fsClient) SetTags(tags string) *probe.Error {
 	return probe.NewError(APINotImplemented{
 		API:     "SetObjectTagging",
 		APIType: "filesystem",
@@ -1120,25 +1121,25 @@ func (f *fsClient) SetObjectTagging(tagMap map[string]string) *probe.Error {
 }
 
 // Delete object tags
-func (f *fsClient) DeleteObjectTagging() *probe.Error {
+func (f *fsClient) DeleteTags() *probe.Error {
 	return probe.NewError(APINotImplemented{
 		API:     "DeleteObjectTagging",
 		APIType: "filesystem",
 	})
 }
 
-// Get lifecycle configuration for a given bucket.
-func (f *fsClient) GetBucketLifecycle() (string, *probe.Error) {
-	return "", probe.NewError(APINotImplemented{
-		API:     "GetBucketLifecycle",
+// Get lifecycle configuration for a given bucket, not implemented.
+func (f *fsClient) GetLifecycle() (ilm.LifecycleConfiguration, *probe.Error) {
+	return ilm.LifecycleConfiguration{}, probe.NewError(APINotImplemented{
+		API:     "GetLifecycle",
 		APIType: "filesystem",
 	})
 }
 
-// Set lifecycle configuration for a given bucket.
-func (f *fsClient) SetBucketLifecycle(lifecycleconfig string) *probe.Error {
+// Set lifecycle configuration for a given bucket, not implemented.
+func (f *fsClient) SetLifecycle(_ ilm.LifecycleConfiguration) *probe.Error {
 	return probe.NewError(APINotImplemented{
-		API:     "SetBucketLifecycle",
+		API:     "SetLifecycle",
 		APIType: "filesystem",
 	})
 }

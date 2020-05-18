@@ -37,6 +37,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/minio/mc/cmd/ilm"
 	"github.com/minio/mc/pkg/httptracer"
 	"github.com/minio/mc/pkg/probe"
 	minio "github.com/minio/minio-go/v6"
@@ -44,7 +45,7 @@ import (
 	"github.com/minio/minio-go/v6/pkg/encrypt"
 	"github.com/minio/minio-go/v6/pkg/policy"
 	"github.com/minio/minio-go/v6/pkg/s3utils"
-	"github.com/minio/minio/pkg/bucket/object/tagging"
+	"github.com/minio/minio-go/v6/pkg/tags"
 	"github.com/minio/minio/pkg/mimedb"
 )
 
@@ -2219,75 +2220,120 @@ func (c *S3Client) GetObjectLockConfig() (minio.RetentionMode, uint64, minio.Val
 	return "", 0, "", probe.NewError(fmt.Errorf("No object lock configuration set on %s", bucket)).Trace(c.GetURL().String())
 }
 
-// GetObjectTagging - Get Object Tags
-func (c *S3Client) GetObjectTagging() (tagging.Tagging, *probe.Error) {
-	var err error
+// GetTags - Get tags of bucket or object.
+func (c *S3Client) GetTags() (*tags.Tags, *probe.Error) {
 	bucketName, objectName := c.url2BucketAndObject()
 	if bucketName == "" {
-		return tagging.Tagging{}, probe.NewError(BucketNameEmpty{})
+		return nil, probe.NewError(BucketNameEmpty{})
 	}
+
 	if objectName == "" {
-		return tagging.Tagging{}, probe.NewError(ObjectNameEmpty{})
+		tags, err := c.api.GetBucketTagging(bucketName)
+		if err != nil {
+			return nil, probe.NewError(err)
+		}
+
+		return tags, nil
 	}
-	tagXML, err := c.api.GetObjectTagging(bucketName, objectName)
+
+	s, err := c.api.GetObjectTagging(bucketName, objectName)
 	if err != nil {
-		return tagging.Tagging{}, probe.NewError(err)
+		return nil, probe.NewError(err)
 	}
-	var tagObj tagging.Tagging
-	if err = xml.Unmarshal([]byte(tagXML), &tagObj); err != nil {
-		return tagging.Tagging{}, probe.NewError(err)
+
+	tags, err := tags.ParseObjectXML(strings.NewReader(s))
+	if err != nil {
+		return nil, probe.NewError(err)
 	}
-	return tagObj, nil
+
+	return tags, nil
 }
 
-// SetObjectTagging - Set Object tags
-func (c *S3Client) SetObjectTagging(tagMap map[string]string) *probe.Error {
-	var err error
-	bucketName, objectName := c.url2BucketAndObject()
-	if bucketName == "" {
-		return probe.NewError(BucketNameEmpty{})
-	}
-	if objectName == "" {
-		return probe.NewError(ObjectNameEmpty{})
-	}
-	if err = c.api.PutObjectTagging(bucketName, objectName, tagMap); err != nil {
-		return probe.NewError(err)
-	}
-	return nil
-}
-
-// DeleteObjectTagging - Delete object tags
-func (c *S3Client) DeleteObjectTagging() *probe.Error {
+// SetTags - Set tags of bucket or object.
+func (c *S3Client) SetTags(tagString string) *probe.Error {
 	bucketName, objectName := c.url2BucketAndObject()
 	if bucketName == "" {
 		return probe.NewError(BucketNameEmpty{})
 	}
-	if objectName == "" {
-		return probe.NewError(ObjectNameEmpty{})
-	}
-	if err := c.api.RemoveObjectTagging(bucketName, objectName); err != nil {
+
+	tags, err := tags.Parse(tagString, objectName != "")
+	if err != nil {
 		return probe.NewError(err)
 	}
+
+	if objectName == "" {
+		err = c.api.SetBucketTagging(bucketName, tags)
+	} else {
+		err = c.api.PutObjectTagging(bucketName, objectName, tags.ToMap())
+	}
+
+	if err != nil {
+		return probe.NewError(err)
+	}
+
 	return nil
 }
 
-// GetBucketLifecycle - Get lifecycle configuration for a given bucket.
-func (c *S3Client) GetBucketLifecycle() (string, *probe.Error) {
-	bucket, _ := c.url2BucketAndObject()
-
-	lifecycleXML, err := c.api.GetBucketLifecycle(bucket)
-	if err != nil {
-		return "", probe.NewError(err)
+// DeleteTags - Delete tags of bucket or object
+func (c *S3Client) DeleteTags() *probe.Error {
+	bucketName, objectName := c.url2BucketAndObject()
+	if bucketName == "" {
+		return probe.NewError(BucketNameEmpty{})
 	}
-	return lifecycleXML, nil
-}
 
-// SetBucketLifecycle - Set lifecycle configuration for a given bucket.
-func (c *S3Client) SetBucketLifecycle(lifecycleXML string) *probe.Error {
-	bucket, _ := c.url2BucketAndObject()
-	err := c.api.SetBucketLifecycle(bucket, lifecycleXML)
+	var err error
+	if objectName == "" {
+		err = c.api.DeleteBucketTagging(bucketName)
+	} else {
+		err = c.api.RemoveObjectTagging(bucketName, objectName)
+	}
+
 	if err != nil {
 		return probe.NewError(err)
 	}
+
+	return nil
+}
+
+// GetLifecycle - Get current lifecycle configuration.
+func (c *S3Client) GetLifecycle() (ilm.LifecycleConfiguration, *probe.Error) {
+	bucket, _ := c.url2BucketAndObject()
+	if bucket == "" {
+		return ilm.LifecycleConfiguration{}, probe.NewError(BucketNameEmpty{})
+	}
+
+	lifecycleXML, e := c.api.GetBucketLifecycle(bucket)
+	if e != nil {
+		return ilm.LifecycleConfiguration{}, probe.NewError(e)
+	}
+
+	lfcCfg := ilm.LifecycleConfiguration{}
+	if e = xml.Unmarshal([]byte(lifecycleXML), &lfcCfg); e != nil && e != io.EOF {
+		return lfcCfg, probe.NewError(e)
+	}
+
+	return lfcCfg, nil
+}
+
+// SetLifecycle - Set lifecycle configuration on a bucket
+func (c *S3Client) SetLifecycle(ilmCfg ilm.LifecycleConfiguration) *probe.Error {
+	bucket, _ := c.url2BucketAndObject()
+	if bucket == "" {
+		return probe.NewError(BucketNameEmpty{})
+	}
+
+	var lifecycleXML []byte
+	if len(ilmCfg.Rules) != 0 {
+		var e error
+		lifecycleXML, e = xml.Marshal(ilmCfg)
+		if e != nil {
+			return probe.NewError(e)
+		}
+	}
+
+	if e := c.api.SetBucketLifecycle(bucket, string(lifecycleXML)); e != nil {
+		return probe.NewError(e)
+	}
+
 	return nil
 }
