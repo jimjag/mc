@@ -46,7 +46,7 @@ var policyCmd = cli.Command{
 	Name:   "policy",
 	Usage:  "manage anonymous access to buckets and objects",
 	Action: mainPolicy,
-	Before: setGlobalsFromContext,
+	Before: initBeforeRunningCmd,
 	Flags:  append(policyFlags, globalFlags...),
 	CustomHelpTemplate: `Name:
   {{.HelpName}} - {{.Usage}}
@@ -437,8 +437,11 @@ func runPolicyCmd(args cli.Args) {
 	perms := accessPerms(args.Get(1))
 	targetURL := args.Get(2)
 	if perms.isValidAccessPERM() {
-		probeErr = doSetAccess(ctx, targetURL, perms)
 		operation = "set"
+		probeErr = doSetAccess(ctx, targetURL, perms)
+		if probeErr == nil {
+			perms, _, probeErr = doGetAccess(ctx, targetURL)
+		}
 	} else if perms.isValidAccessFile() {
 		probeErr = doSetAccessJSON(ctx, targetURL, perms)
 		operation = "set-json"
