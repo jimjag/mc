@@ -31,7 +31,7 @@ import (
 	"github.com/minio/cli"
 	json "github.com/minio/mc/pkg/colorjson"
 	"github.com/minio/mc/pkg/probe"
-	"github.com/minio/minio-go/v6/pkg/encrypt"
+	"github.com/minio/minio-go/v7/pkg/encrypt"
 	"github.com/minio/minio/pkg/console"
 )
 
@@ -117,7 +117,7 @@ var mirrorCmd = cli.Command{
 	Name:   "mirror",
 	Usage:  "synchronize object(s) to a remote site",
 	Action: mainMirror,
-	Before: initBeforeRunningCmd,
+	Before: setGlobalsFromContext,
 	Flags:  append(append(mirrorFlags, ioFlags...), globalFlags...),
 	CustomHelpTemplate: `NAME:
   {{.HelpName}} - {{.Usage}}

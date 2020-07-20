@@ -25,7 +25,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/minio/cli"
 	"github.com/minio/mc/pkg/probe"
-	minio "github.com/minio/minio-go/v6"
+	minio "github.com/minio/minio-go/v7"
 	"github.com/minio/minio/pkg/console"
 )
 
@@ -41,7 +41,7 @@ var legalHoldCmd = cli.Command{
 	Name:   "legalhold",
 	Usage:  "set legal hold for object(s)",
 	Action: mainLegalHold,
-	Before: initBeforeRunningCmd,
+	Before: setGlobalsFromContext,
 	Flags:  append(lhFlags, globalFlags...),
 	CustomHelpTemplate: `NAME:
   {{.HelpName}} - {{.Usage}}

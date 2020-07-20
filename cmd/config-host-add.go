@@ -27,7 +27,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/minio/cli"
 	"github.com/minio/mc/pkg/probe"
-	"github.com/minio/minio-go/v6"
+	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio/pkg/console"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -50,7 +50,7 @@ var configHostAddCmd = cli.Command{
 	ShortName:       "a",
 	Usage:           "add a new host to configuration file",
 	Action:          mainConfigHostAdd,
-	Before:          initBeforeRunningCmd,
+	Before:          setGlobalsFromContext,
 	Flags:           append(hostAddFlags, globalFlags...),
 	HideHelpCommand: true,
 	CustomHelpTemplate: `NAME:

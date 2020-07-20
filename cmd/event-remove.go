@@ -20,8 +20,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/minio/minio-go/v6"
-
 	"github.com/fatih/color"
 	"github.com/minio/cli"
 	json "github.com/minio/mc/pkg/colorjson"
@@ -54,7 +52,7 @@ var eventRemoveCmd = cli.Command{
 	Name:   "remove",
 	Usage:  "remove a bucket notification; '--force' removes all bucket notifications",
 	Action: mainEventRemove,
-	Before: initBeforeRunningCmd,
+	Before: setGlobalsFromContext,
 	Flags:  append(eventRemoveFlags, globalFlags...),
 	CustomHelpTemplate: `NAME:
   {{.HelpName}} - {{.Usage}}
@@ -136,9 +134,6 @@ func mainEventRemove(cliCtx *cli.Context) error {
 
 	err = s3Client.RemoveNotificationConfig(ctx, arn, event, prefix, suffix)
 	if err != nil {
-		if err.Cause == minio.ErrNoNotificationConfigMatch {
-			fatalIf(err, "Remove event failed.")
-		}
 		fatalIf(err, "Cannot disable notification on the specified bucket.")
 	}
 

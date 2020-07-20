@@ -31,7 +31,7 @@ import (
 var adminTopLocksCmd = cli.Command{
 	Name:   "locks",
 	Usage:  "Get a list of the 10 oldest locks on a MinIO cluster.",
-	Before: initBeforeRunningCmd,
+	Before: setGlobalsFromContext,
 	Action: mainAdminTopLocks,
 	Flags:  globalFlags,
 	CustomHelpTemplate: `NAME:
@@ -75,15 +75,13 @@ func (u lockMessage) String() string {
 	timeFieldMaxLen := 20
 	resourceFieldMaxLen := -1
 	typeFieldMaxLen := 6
-	ownerFieldMaxLen := 20
 
 	lockState, timeDiff := getTimeDiff(u.Lock.Timestamp)
 	return console.Colorize(lockState, newPrettyTable("  ",
 		Field{"Time", timeFieldMaxLen},
 		Field{"Type", typeFieldMaxLen},
-		Field{"Owner", ownerFieldMaxLen},
 		Field{"Resource", resourceFieldMaxLen},
-	).buildRow(timeDiff, u.Lock.Type, u.Lock.Owner, u.Lock.Resource))
+	).buildRow(timeDiff, u.Lock.Type, u.Lock.Resource))
 }
 
 // JSON jsonified top oldest locks message.
@@ -130,13 +128,11 @@ func printHeaders() {
 	timeFieldMaxLen := 20
 	resourceFieldMaxLen := -1
 	typeFieldMaxLen := 6
-	ownerFieldMaxLen := 20
 	console.Println(console.Colorize("Headers", newPrettyTable("  ",
 		Field{"Time", timeFieldMaxLen},
 		Field{"Type", typeFieldMaxLen},
-		Field{"Owner", ownerFieldMaxLen},
 		Field{"Resource", resourceFieldMaxLen},
-	).buildRow("Time", "Type", "Owner", "Resource")))
+	).buildRow("Time", "Type", "Resource")))
 }
 
 // Prints oldest locks.

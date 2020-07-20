@@ -17,6 +17,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -41,7 +42,7 @@ var shareUpload = cli.Command{
 	Name:   "upload",
 	Usage:  "generate `curl` command to upload objects without requiring access/secret keys",
 	Action: mainShareUpload,
-	Before: initBeforeRunningCmd,
+	Before: setGlobalsFromContext,
 	Flags:  append(shareUploadFlags, globalFlags...),
 	CustomHelpTemplate: `NAME:
   {{.HelpName}} - {{.Usage}}
@@ -149,7 +150,7 @@ func doShareUploadURL(objectURL string, isRecursive bool, expiry time.Duration, 
 	}
 
 	// Generate pre-signed access info.
-	shareURL, uploadInfo, err := clnt.ShareUpload(isRecursive, expiry, contentType)
+	shareURL, uploadInfo, err := clnt.ShareUpload(context.Background(), isRecursive, expiry, contentType)
 	if err != nil {
 		return err.Trace(objectURL, "expiry="+expiry.String(), "contentType="+contentType)
 	}

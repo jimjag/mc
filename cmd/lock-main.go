@@ -26,7 +26,7 @@ import (
 	"github.com/minio/cli"
 	json "github.com/minio/mc/pkg/colorjson"
 	"github.com/minio/mc/pkg/probe"
-	minio "github.com/minio/minio-go/v6"
+	minio "github.com/minio/minio-go/v7"
 	"github.com/minio/minio/pkg/console"
 )
 
@@ -43,7 +43,7 @@ var lockCmd = cli.Command{
 	Name:   "lock",
 	Usage:  "set and get object lock configuration",
 	Action: mainLock,
-	Before: initBeforeRunningCmd,
+	Before: setGlobalsFromContext,
 	Flags:  append(lockFlags, globalFlags...),
 	CustomHelpTemplate: `NAME:
   {{.HelpName}} - {{.Usage}}

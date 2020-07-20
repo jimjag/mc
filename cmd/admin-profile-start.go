@@ -21,7 +21,7 @@ import (
 
 	"github.com/minio/cli"
 	"github.com/minio/mc/pkg/probe"
-	"github.com/minio/minio-go/v6/pkg/set"
+	"github.com/minio/minio-go/v7/pkg/set"
 	"github.com/minio/minio/pkg/console"
 	"github.com/minio/minio/pkg/madmin"
 )
@@ -38,7 +38,7 @@ var adminProfileStartCmd = cli.Command{
 	Name:            "start",
 	Usage:           "start recording profile data",
 	Action:          mainAdminProfileStart,
-	Before:          initBeforeRunningCmd,
+	Before:          setGlobalsFromContext,
 	Flags:           append(adminProfileStartFlags, globalFlags...),
 	HideHelpCommand: true,
 	CustomHelpTemplate: `NAME:

@@ -32,7 +32,7 @@ import (
 
 	"github.com/minio/cli"
 	"github.com/minio/mc/pkg/probe"
-	"github.com/minio/minio-go/v6"
+	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio/pkg/mimedb"
 )
 
@@ -79,7 +79,7 @@ var sqlCmd = cli.Command{
 	Name:   "sql",
 	Usage:  "run sql queries on objects",
 	Action: mainSQL,
-	Before: initBeforeRunningCmd,
+	Before: setGlobalsFromContext,
 	Flags:  append(append(sqlFlags, ioFlags...), globalFlags...),
 	CustomHelpTemplate: `NAME:
   {{.HelpName}} - {{.Usage}}

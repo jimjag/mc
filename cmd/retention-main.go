@@ -27,7 +27,7 @@ import (
 	"github.com/minio/cli"
 	json "github.com/minio/mc/pkg/colorjson"
 	"github.com/minio/mc/pkg/probe"
-	minio "github.com/minio/minio-go/v6"
+	minio "github.com/minio/minio-go/v7"
 	"github.com/minio/minio/pkg/console"
 )
 
@@ -50,7 +50,7 @@ var retentionCmd = cli.Command{
 	Name:   "retention",
 	Usage:  "set retention for object(s)",
 	Action: mainRetention,
-	Before: initBeforeRunningCmd,
+	Before: setGlobalsFromContext,
 	Flags:  append(rFlags, globalFlags...),
 	CustomHelpTemplate: `NAME:
   {{.HelpName}} - {{.Usage}}

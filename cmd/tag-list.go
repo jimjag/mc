@@ -27,6 +27,7 @@ import (
 	"github.com/minio/cli"
 	json "github.com/minio/mc/pkg/colorjson"
 	"github.com/minio/mc/pkg/probe"
+	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio/pkg/console"
 )
 
@@ -34,7 +35,7 @@ var tagListCmd = cli.Command{
 	Name:   "list",
 	Usage:  "list tags of a bucket or an object",
 	Action: mainListTag,
-	Before: initBeforeRunningCmd,
+	Before: setGlobalsFromContext,
 	Flags:  globalFlags,
 	CustomHelpTemplate: `NAME:
   {{.HelpName}} - {{.Usage}}
@@ -113,11 +114,15 @@ func mainListTag(cliCtx *cli.Context) error {
 	clnt, err := newClient(targetURL)
 	fatalIf(err, "Unable to initialize target "+targetURL)
 
-	tags, err := clnt.GetTags(ctx)
-	fatalIf(err, "Unable to fetch tags for "+targetURL)
+	tagsMap, err := clnt.GetTags(ctx)
+	if err != nil {
+		if minio.ToErrorResponse(err.ToGoError()).Code == "NoSuchTagSet" {
+			fatalIf(probe.NewError(errors.New("check 'mc tag set --help' on how to set tags")), "No tags found  for "+targetURL)
+		}
+		fatalIf(err, "Unable to fetch tags for "+targetURL)
+	}
 
-	tagMap := tags.ToMap()
-	if len(tagMap) == 0 {
+	if len(tagsMap) == 0 {
 		fatalIf(probe.NewError(errors.New("check 'mc tag set --help' on how to set tags")), "No tags found  for "+targetURL)
 	}
 
@@ -126,7 +131,7 @@ func mainListTag(cliCtx *cli.Context) error {
 	console.SetColor("Value", color.New(color.FgYellow))
 
 	printMsg(tagListMessage{
-		Tags:   tagMap,
+		Tags:   tagsMap,
 		Status: "success",
 		URL:    targetURL,
 	})
