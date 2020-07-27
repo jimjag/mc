@@ -18,18 +18,18 @@ stat       show object metadata
 mv         move objects
 tree       list buckets and objects in a tree format
 du         summarize disk usage recursively
-lock       set and get object lock configuration
+lock       manage default bucket object lock configuration
 retention  set retention for object(s)
 legalhold  set legal hold for object(s)
 diff       list differences in object name, size, and date between two buckets
 rm         remove objects
-event      configure object notifications
-ilm        configure bucket lifecycle
+event      manage object notifications
+bucket     manage bucket configuration
 watch      listen for object notification events
 policy     manage anonymous access to buckets and objects
 tag        manage tags for bucket(s) and object(s)
 admin      manage MinIO servers
-config     configure MinIO client
+config     manage MinIO client
 update     update mc to latest release
 ```
 
@@ -302,10 +302,10 @@ mc version RELEASE.2020-04-25T00-43-23Z
 | [**ls** - list buckets and objects](#ls)                                                | [**tree** - list buckets and objects in a tree format](#tree)  | [**mb** - make a bucket](#mb)                              | [**cat** - display object contents](#cat) |
 | [**cp** - copy objects](#cp)                                                            | [**rb** - remove a bucket](#rb)                                | [**pipe** - stream STDIN to an object](#pipe)              |  [**version** - manage bucket version](#version)                                        |
 | [**share** - generate URL for temporary access to an object](#share)                    | [**rm** - remove objects](#rm)                                 | [**find** - find files and objects](#find)                 |                                           |
-| [**diff** - list differences in object name, size, and date between two buckets](#diff) | [**mirror** - synchronize object(s) to a remote site](#mirror) | [**ilm** - configure bucket lifecycle] (#ilm)              |                                           |
-| [**config** - manage config file](#config)                                              | [**policy** - set public policy on bucket or prefix](#policy)  | [**event** - manage events on your buckets](#event)        |                                           |
+| [**diff** - list differences in object name, size, and date between two buckets](#diff) | [**mirror** - synchronize object(s) to a remote site](#mirror) | [**ilm** - manage bucket lifecycle](#ilm)              |                                           |
+| [**config** - manage config file](#config)                                              | [**policy** - set public policy on bucket or prefix](#policy)  | [**event** - manage events on your buckets](#event)        |[**replicate** - manage bucket replication](#replicate)                                           |
 | [**update** - manage software updates](#update)                                         | [**watch** - watch for events](#watch)                         | [**stat** - stat contents of objects and folders](#stat)   |                                           |
-| [**head** - display first 'n' lines of an object](#head)                                | [**lock** - set and get object lock configuration](#lock)      | [**retention** - set retention for object(s)](#retention)  |                                           |
+| [**head** - display first 'n' lines of an object](#head)                                | [**lock** - manage default bucket object lock configuration](#lock)      | [**retention** - set retention for object(s)](#retention)  |                                           |
 | [**mv** - move objects](#mv)                                                            | [**sql** - run sql queries on objects](#sql)                   | [**legalhold** - set legal hold for object(s)](#legalhold) |                                           |
 
 
@@ -1166,7 +1166,7 @@ mc watch ~/Photos
 
 <a name="event"></a>
 ### Command `event`
-``event`` provides a convenient way to configure various types of event notifications on a bucket. MinIO event notification can be configured to use AMQP, Redis, ElasticSearch, NATS and PostgreSQL services. MinIO configuration provides more details on how these services can be configured.
+``event`` provides a convenient way to manage various types of event notifications on a bucket. MinIO event notification can be configured to use AMQP, Redis, ElasticSearch, NATS and PostgreSQL services. MinIO configuration provides more details on how these services can be configured.
 
 ```
 USAGE:
@@ -1211,11 +1211,11 @@ mc event remove play/andoria arn:minio:sqs:us-east-1:1:your-queue
 
 <a name="ilm"></a>
 ### Command `ilm`
-``ilm`` provides a convenient way to setup various bucket lifecycle configurations.
+``ilm`` - A convenient way to manage bucket lifecycle configuration.
 
 ```
 USAGE:
-  mc ilm COMMAND [COMMAND FLAGS | -h] [ARGUMENTS...]
+  mc bucket ilm COMMAND [COMMAND FLAGS | -h] [ARGUMENTS...]
 
 COMMANDS:
   list    pretty print bucket lifecycle configuration
@@ -1232,7 +1232,7 @@ FLAGS:
 *Example: List the lifecycle management rules*
 
 ```
-mc ilm list myminio/testbucket
+mc bucket ilm list myminio/testbucket
    ID    | Prefix | Enabled | Expiry |  Date/Days   | Transition | Date/Days | Storage-Class | Tags
 ---------|--------|---------|--------|--------------|------------|-----------|---------------|------
  Devices |  dev/  |    ✓    |   ✓   | 17 Sep 2020  |     ✗      |           |               |
@@ -1244,13 +1244,13 @@ For more details about the lifecycle configuration, refer to official AWS S3 doc
 
 *Example: Add rule for testbucket on play*
 ```
-mc ilm add --id "Devices" --prefix "dev/" --expiry-date "2020-09-17" play/testbucket
+mc bucket ilm add --id "Devices" --prefix "dev/" --expiry-date "2020-09-17" play/testbucket
 Lifecycle configuration rule added with ID `Devices` to play/testbucket.
 ```
 
 *Example: Remove the lifecycle management configuration rule given by ID "Documents"*
 ```
-mc ilm remove --id "Documents" play/testbucket
+mc bucket ilm remove --id "Documents" play/testbucket
 Rule ID `Documents` from target play/testbucket removed.
 ```
 
@@ -1355,6 +1355,82 @@ Remove tags assigned to `testobject` in `testbucket` in alias `s3`
 ```
 mc tag remove s3/testbucket/testobject
 Tags removed for s3/testbucket/testobject.
+```
+
+<a name="replicate"></a>
+### Command `replicate`
+`replicate` - A convenient way to manage bucket replication configuration.
+
+```
+USAGE:
+  mc bucket replicate [COMMAND FLAGS | -h] TARGET
+
+FLAGS:
+  --config value                add a config.json with replication configuration
+  --clear                       remove replication configuration
+  --help, -h                    show help
+  --json                        enable JSON formatted output
+  --debug                       enable debug output
+```
+
+*Example : Set replication configuration on a bucket. The replication configuration needs to be in json format. If replication configuration is being set on MinIO, the config json should have a ReplicationArn tag. An admin user should have configured a replication target for the replication endpoint and provided a ARN via `mc admin bucket replication set` and `mc admin bucket remote` commands*
+
+Set replication configuration in `config.json` with replication ARN `arn:minio:s3::598361bf-3cec-49a7-b529-ce870a34d759:*` on `testbucket` in alias `myminio`
+```
+$ cat config.json
+{
+  "ReplicationArn":"arn:minio:s3::598361bf-3cec-49a7-b529-ce870a34d759:*",
+  "Rules": [
+    {
+      "Status": "Enabled",
+      "Priority": 1,
+      "DeleteMarkerReplication": { "Status": "Disabled" },
+      "Filter" : { "Prefix": "Tax"},
+      "Destination": {
+        "Bucket": "arn:aws:s3:::destbucket",
+        "StorageClass":"STANDARD"
+      }
+    }
+  ]
+}
+
+mc bucket replicate myminio/testbucket --config "config.json"
+Replication configuration added successfully to myminio/testbucket.
+```
+
+*Example : List replication configuration for a bucket*
+
+List replication configuration for `testbucket` in alias `myminio`
+```
+mc bucket replicate myminio/testbucket
+{
+ "ReplicationArn": "arn:minio:s3::95e989fc-3d02-49f1-8d92-9c024926ce30:*",
+ "Rules": [
+  {
+   "ID": "",
+   "Status": "Enabled",
+   "Priority": 1,
+   "DeleteMarkerReplication": {
+    "Status": "Disabled"
+   },
+   "Destination": {
+    "Bucket": "arn:aws:s3:::destbucket",
+    "StorageClass": "STANDARD"
+   },
+   "Filter": {
+    "Prefix": "Tax",
+   }
+  }
+ ]
+}
+```
+
+*Example : Remove replication configuration on a bucket*
+
+Remove replication configuration on `testbucket` in alias `myminio`
+```
+mc bucket replicate myminio/testbucket --clear
+Replication configuration removed successfully from myminio/testbucket.
 ```
 
 <a name="admin"></a>

@@ -26,6 +26,7 @@ var adminBucketCmd = cli.Command{
 	Flags:  globalFlags,
 	Subcommands: []cli.Command{
 		adminBucketQuotaCmd,
+		adminBucketReplicationCmd,
 	},
 	HideHelpCommand: true,
 }
@@ -34,5 +35,5 @@ var adminBucketCmd = cli.Command{
 func mainAdminBucket(ctx *cli.Context) error {
 	cli.ShowCommandHelp(ctx, ctx.Args().First())
 	return nil
-	// Sub-commands like "quota", "usage" have their own main.
+	// Sub-commands like "quota", "replication" have their own main.
 }
