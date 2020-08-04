@@ -1,5 +1,5 @@
 /*
- * MinIO Client (C) 2019 MinIO, Inc.
+ * MinIO Client (C) 2019-2020 MinIO, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ var (
 	rbFlags = []cli.Flag{
 		cli.BoolFlag{
 			Name:  "force",
-			Usage: "allow a recursive remove operation",
+			Usage: "force a recursive remove operation on all object versions",
 		},
 		cli.BoolFlag{
 			Name:  "dangerous",
@@ -62,10 +62,10 @@ FLAGS:
 EXAMPLES:
   1. Remove an empty bucket on Amazon S3 cloud storage
      {{.Prompt}} {{.HelpName}} s3/mybucket
-	 
+
   2. Remove a directory hierarchy.
      {{.Prompt}} {{.HelpName}} /tmp/this/new/dir1
-	 
+
   3. Remove bucket 'jazz-songs' and all its contents
      {{.Prompt}} {{.HelpName}} --force s3/jazz-songs
 
@@ -114,7 +114,7 @@ func checkRbSyntax(ctx context.Context, cliCtx *cli.Context) {
 	}
 }
 
-// deletes a bucket and all its contents
+// Delete a bucket and all its objects and versions will be removed as well.
 func deleteBucket(ctx context.Context, url string) *probe.Error {
 	targetAlias, targetURL, _ := mustExpandAlias(url)
 	clnt, pErr := newClientFromAlias(targetAlias, targetURL)
@@ -128,7 +128,14 @@ func deleteBucket(ctx context.Context, url string) *probe.Error {
 
 	go func() {
 		defer close(contentCh)
-		for content := range clnt.List(ctx, ListOptions{isRecursive: true, showDir: DirLast}) {
+		opts := ListOptions{
+			isRecursive:       true,
+			withOlderVersions: true,
+			withDeleteMarkers: true,
+			showDir:           DirLast,
+		}
+
+		for content := range clnt.List(ctx, opts) {
 			if content.Err != nil {
 				contentCh <- content
 				continue
@@ -218,11 +225,25 @@ func mainRemoveBucket(cliCtx *cli.Context) error {
 			}
 		}
 
+		// Check if the bucket contains any object, version or delete marker.
 		isEmpty := true
-		for range clnt.List(ctx, ListOptions{isRecursive: true, showDir: DirNone}) {
+		opts := ListOptions{
+			isRecursive:       true,
+			showDir:           DirNone,
+			withOlderVersions: true,
+			withDeleteMarkers: true,
+		}
+
+		listCtx, listCancel := context.WithCancel(ctx)
+		for obj := range clnt.List(listCtx, opts) {
+			if obj.Err != nil {
+				continue
+			}
 			isEmpty = false
 			break
 		}
+		listCancel()
+
 		// For all recursive operations make sure to check for 'force' flag.
 		if !isForce && !isEmpty {
 			fatalIf(errDummy().Trace(), "`"+targetURL+"` is not empty. Retry this command with ‘--force’ flag if you want to remove `"+targetURL+"` and all its contents")
