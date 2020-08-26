@@ -745,15 +745,6 @@ func runMirror(ctx context.Context, cancelMirror context.CancelFunc, srcURL, dst
 		(srcClt.GetURL().Type == objectStorage &&
 			srcClt.GetURL().Path == string(srcClt.GetURL().Separator))
 
-	// Check if we are only trying to mirror one bucket from source.
-	if dstClt.GetURL().Type == objectStorage &&
-		dstClt.GetURL().Path == string(dstClt.GetURL().Separator) && !mirrorAllBuckets {
-		dstURL = urlJoinPath(dstURL, srcClt.GetURL().Path)
-
-		dstClt, err = newClient(dstURL)
-		fatalIf(err, "Unable to initialize `"+dstURL+"`.")
-	}
-
 	// Create a new mirror job and execute it
 	mj := newMirrorJob(srcURL, dstURL, mirrorOptions{
 		isFake:           cli.Bool("fake"),
@@ -807,8 +798,15 @@ func runMirror(ctx context.Context, cancelMirror context.CancelFunc, srcURL, dst
 				}
 				// object lock configuration set on bucket
 				if mode != "" {
-					errorIf(newDstClt.SetObjectLockConfig(ctx, mode, validity, unit),
+					err = newDstClt.SetObjectLockConfig(ctx, mode, validity, unit)
+					errorIf(err,
 						"Unable to set object lock config in `"+newTgtURL+"`.")
+					if err != nil && mj.opts.activeActive {
+						return true
+					}
+					if err == nil {
+						mj.opts.md5 = true
+					}
 				}
 				errorIf(copyBucketPolicies(ctx, newSrcClt, newDstClt, isOverwrite),
 					"Unable to copy bucket policies to `"+newDstClt.GetURL().String()+"`.")
@@ -842,8 +840,31 @@ func runMirror(ctx context.Context, cancelMirror context.CancelFunc, srcURL, dst
 				return true
 			}
 		} else {
-			mj.status.fatalIf(dstClt.MakeBucket(ctx, cli.String("region"), true, withLock),
-				"Unable to create bucket at `"+dstURL+"`.")
+			targetAlias, targetURL, _ := mustExpandAlias(srcURL)
+			if !strings.HasSuffix(targetURL, string(srcClt.GetURL().Separator)) {
+				targetURL += string(srcClt.GetURL().Separator)
+			}
+
+			srcClt, err := newClientFromAlias(targetAlias, targetURL)
+			fatalIf(err.Trace(targetURL), "Unable to initialize target `"+targetURL+"`.")
+
+			dstInitialURL := dstURL
+			for content := range srcClt.List(ctx, ListOptions{isRecursive: false, showDir: DirNone}) {
+				if content.Err != nil {
+					errorIf(content.Err.Trace(srcClt.GetURL().String()), "Unable to list folder.")
+					continue
+				}
+
+				if content.Type.IsDir() {
+					dstURL = urlJoinPath(dstInitialURL, filepath.Base(content.URL.Path)+string(srcClt.GetURL().Separator))
+
+					dstClt, err = newClient(dstURL)
+					fatalIf(err, "Unable to initialize `"+dstURL+"`.")
+					mj.status.fatalIf(dstClt.MakeBucket(ctx, cli.String("region"), true, withLock),
+						"Unable to create bucket at `"+dstURL+"`.")
+				}
+
+			}
 		}
 
 		// object lock configuration set on bucket
@@ -852,6 +873,9 @@ func runMirror(ctx context.Context, cancelMirror context.CancelFunc, srcURL, dst
 			errorIf(err, "Unable to set object lock config in `"+dstURL+"`.")
 			if err != nil && mj.opts.activeActive {
 				return true
+			}
+			if err == nil {
+				mj.opts.md5 = true
 			}
 		}
 
