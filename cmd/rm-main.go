@@ -37,11 +37,11 @@ var (
 	rmFlags = []cli.Flag{
 		cli.BoolFlag{
 			Name:  "versions",
-			Usage: "remove object(s) and all its version(s)",
+			Usage: "remove object(s) and all its versions",
 		},
 		cli.StringFlag{
 			Name:  "rewind",
-			Usage: "rollback object(s) to older version(s)",
+			Usage: "roll back object(s) to current version at specified time",
 		},
 		cli.StringFlag{
 			Name:  "version-id, vid",
@@ -242,7 +242,7 @@ func remove(url, versionID string, isIncomplete, isFake, isForce, isBypass bool,
 	defer cancelRemoveSingle()
 
 	isRecursive := false
-	contents, pErr := statURL(ctx, url, versionID, isIncomplete, isRecursive, encKeyDB)
+	contents, pErr := statURL(ctx, url, versionID, time.Time{}, false, isIncomplete, isRecursive, encKeyDB)
 	if pErr != nil {
 		errorIf(pErr.Trace(url), "Failed to remove `"+url+"`.")
 		return exitStatus(globalErrorExitStatus)
