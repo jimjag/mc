@@ -1626,7 +1626,7 @@ func (c *S3Client) List(ctx context.Context, opts ListOptions) <-chan *ClientCon
 
 	contentCh := make(chan *ClientContent)
 
-	if !opts.timeRef.IsZero() || opts.withOlderVersions {
+	if !opts.TimeRef.IsZero() || opts.WithOlderVersions {
 		b, o := c.url2BucketAndObject()
 		go func() {
 			switch {
@@ -1641,7 +1641,7 @@ func (c *S3Client) List(ctx context.Context, opts ListOptions) <-chan *ClientCon
 				}
 				for _, bucket := range buckets {
 					for objectVersion := range c.listVersions(ctx, bucket.Name, "",
-						opts.isRecursive, opts.timeRef, opts.withOlderVersions, opts.withDeleteMarkers) {
+						opts.IsRecursive, opts.TimeRef, opts.WithOlderVersions, opts.WithDeleteMarkers) {
 						if objectVersion.Err != nil {
 							if minio.ToErrorResponse(objectVersion.Err).Code == "NotImplemented" {
 								goto noVersioning
@@ -1659,7 +1659,7 @@ func (c *S3Client) List(ctx context.Context, opts ListOptions) <-chan *ClientCon
 				return
 			default:
 				for objectVersion := range c.listVersions(ctx, b, o,
-					opts.isRecursive, opts.timeRef, opts.withOlderVersions, opts.withDeleteMarkers) {
+					opts.IsRecursive, opts.TimeRef, opts.WithOlderVersions, opts.WithDeleteMarkers) {
 					if objectVersion.Err != nil {
 						if minio.ToErrorResponse(objectVersion.Err).Code == "NotImplemented" {
 							goto noVersioning
@@ -1681,25 +1681,25 @@ func (c *S3Client) List(ctx context.Context, opts ListOptions) <-chan *ClientCon
 		return contentCh
 	}
 
-	if opts.isIncomplete {
-		if opts.isRecursive {
-			if opts.showDir == DirNone {
+	if opts.IsIncomplete {
+		if opts.IsRecursive {
+			if opts.ShowDir == DirNone {
 				go c.listIncompleteRecursiveInRoutine(ctx, contentCh)
 			} else {
-				go c.listIncompleteRecursiveInRoutineDirOpt(ctx, contentCh, opts.showDir)
+				go c.listIncompleteRecursiveInRoutineDirOpt(ctx, contentCh, opts.ShowDir)
 			}
 		} else {
 			go c.listIncompleteInRoutine(ctx, contentCh)
 		}
 	} else {
-		if opts.isRecursive {
-			if opts.showDir == DirNone {
-				go c.listRecursiveInRoutine(ctx, contentCh, opts.isFetchMeta)
+		if opts.IsRecursive {
+			if opts.ShowDir == DirNone {
+				go c.listRecursiveInRoutine(ctx, contentCh, opts.IsFetchMeta)
 			} else {
-				go c.listRecursiveInRoutineDirOpt(ctx, contentCh, opts.showDir, opts.isFetchMeta)
+				go c.listRecursiveInRoutineDirOpt(ctx, contentCh, opts.ShowDir, opts.IsFetchMeta)
 			}
 		} else {
-			go c.listInRoutine(ctx, contentCh, opts.isFetchMeta)
+			go c.listInRoutine(ctx, contentCh, opts.IsFetchMeta)
 		}
 	}
 
@@ -2647,4 +2647,65 @@ func (c *S3Client) DeleteEncryption(ctx context.Context) *probe.Error {
 		return probe.NewError(err)
 	}
 	return nil
+}
+
+// GetBucketInfo gets info about a bucket
+func (c *S3Client) GetBucketInfo(ctx context.Context) (BucketInfo, *probe.Error) {
+	var b BucketInfo
+	bucket, _ := c.url2BucketAndObject()
+	if bucket == "" {
+		return b, probe.NewError(BucketNameEmpty{})
+	}
+	content, err := c.bucketStat(ctx, bucket)
+	if err != nil {
+		return b, err.Trace(bucket)
+	}
+	b.URL = content.URL
+	b.Size = content.Size
+	b.Type = content.Type
+	b.Date = content.Time
+	if vcfg, err := c.GetVersion(ctx); err == nil {
+		b.Versioning.Status = vcfg.Status
+		b.Versioning.MFADelete = vcfg.MFADelete
+	}
+	if enabled, mode, validity, unit, err := c.api.GetObjectLockConfig(ctx, bucket); err == nil {
+		if mode != nil {
+			b.Locking.Mode = *mode
+		}
+		b.Locking.Enabled = enabled
+		if validity != nil && unit != nil {
+			vuint64 := uint64(*validity)
+			b.Locking.Validity = fmt.Sprintf("%d%s", vuint64, unit)
+		}
+	}
+
+	if rcfg, err := c.GetReplication(ctx); err == nil {
+		if !rcfg.Empty() {
+			b.Replication.Enabled = true
+		}
+	}
+	if algo, keyID, err := c.GetEncryption(ctx); err == nil {
+		b.Encryption.Algorithm = algo
+		b.Encryption.KeyID = keyID
+	}
+
+	if pType, policyStr, err := c.GetAccess(ctx); err == nil {
+		b.Policy.Type = pType
+		b.Policy.Text = policyStr
+	}
+	location, e := c.api.GetBucketLocation(ctx, bucket)
+	if e != nil {
+		return b, probe.NewError(e)
+	}
+	b.Location = location
+	if tags, err := c.GetTags(ctx, ""); err == nil {
+		b.Tagging = tags
+	}
+	if lfc, err := c.GetLifecycle(ctx); err == nil {
+		b.ILM.Config = lfc
+	}
+	if nfc, err := c.api.GetBucketNotification(ctx, bucket); err == nil {
+		b.Notification.Config = nfc
+	}
+	return b, nil
 }
