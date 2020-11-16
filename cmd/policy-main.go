@@ -22,7 +22,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/fatih/color"
@@ -77,7 +76,7 @@ EXAMPLES:
    3. Set bucket to "upload" on Amazon S3 cloud storage.
       {{.Prompt}} {{.HelpName}} set upload s3/incoming
 
-   4. Set policy to "public" for bucket with prefix on Amazon S3 cloud storage. 
+   4. Set policy to "public" for bucket with prefix on Amazon S3 cloud storage.
       {{.Prompt}} {{.HelpName}} set public s3/public-commons/images
 
    5. Set a custom prefix based bucket policy on Amazon S3 cloud storage using a JSON file.
@@ -85,7 +84,7 @@ EXAMPLES:
 
    6. Get bucket permissions.
       {{.Prompt}} {{.HelpName}} get s3/shared
-	
+
    7. Get bucket permissions in JSON format.
       {{.Prompt}} {{.HelpName}} get-json s3/shared
 
@@ -209,12 +208,6 @@ func checkPolicySyntax(ctx *cli.Context) {
 		if argsLength != 3 {
 			cli.ShowCommandHelpAndExit(ctx, "policy", 1)
 		}
-		// Validate the type of input file
-		if filepath.Ext(string(secondArg)) != ".json" {
-			fatalIf(errDummy().Trace(),
-				"Unrecognized policy file format `"+string(secondArg)+"`. Only json files are accepted.")
-		}
-
 	case "get", "get-json":
 		// get or get-json always expects two arguments
 		if argsLength != 2 {
@@ -398,7 +391,7 @@ func runPolicyLinksCmd(args cli.Args, recursive bool) {
 		clnt, err := newClient(newURL)
 		fatalIf(err.Trace(newURL), "Unable to initialize target `"+targetURL+"`.")
 		// Search for public objects
-		for content := range clnt.List(globalContext, ListOptions{IsRecursive: recursive, ShowDir: DirFirst}) {
+		for content := range clnt.List(globalContext, ListOptions{Recursive: recursive, ShowDir: DirFirst}) {
 			if content.Err != nil {
 				errorIf(content.Err.Trace(clnt.GetURL().String()), "Unable to list folder.")
 				continue
