@@ -32,6 +32,7 @@ import (
 	"github.com/minio/cli"
 	json "github.com/minio/mc/pkg/colorjson"
 	"github.com/minio/mc/pkg/probe"
+	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/encrypt"
 	"github.com/minio/minio/pkg/console"
 )
@@ -67,7 +68,7 @@ var (
 		},
 		cli.BoolFlag{
 			Name:  "preserve, a",
-			Usage: "preserve file(s)/object(s) attributes and bucket policy rules on target bucket(s)",
+			Usage: "preserve file(s)/object(s) attributes and bucket(s) policy/locking configuration(s) on target bucket(s)",
 		},
 		cli.BoolFlag{
 			Name:  "md5",
@@ -736,11 +737,6 @@ func runMirror(ctx context.Context, cancelMirror context.CancelFunc, srcURL, dst
 	dstClt, err := newClient(dstURL)
 	fatalIf(err, "Unable to initialize `"+dstURL+"`.")
 
-	mirrorAllBuckets := (dstClt.GetURL().Type == objectStorage &&
-		dstClt.GetURL().Path == string(dstClt.GetURL().Separator)) &&
-		(srcClt.GetURL().Type == objectStorage &&
-			srcClt.GetURL().Path == string(srcClt.GetURL().Separator))
-
 	// This is kept for backward compatibility, `--force` means
 	// --overwrite.
 	isOverwrite := cli.Bool("force")
@@ -774,7 +770,13 @@ func runMirror(ctx context.Context, cancelMirror context.CancelFunc, srcURL, dst
 	// Create a new mirror job and execute it
 	mj := newMirrorJob(srcURL, dstURL, mopts)
 
-	if mirrorAllBuckets {
+	preserve := cli.Bool("preserve")
+
+	createDstBuckets := dstClt.GetURL().Type == objectStorage && dstClt.GetURL().Path == string(dstClt.GetURL().Separator)
+	mirrorSrcBuckets := srcClt.GetURL().Type == objectStorage && srcClt.GetURL().Path == string(srcClt.GetURL().Separator)
+	mirrorBucketsToBuckets := mirrorSrcBuckets && createDstBuckets
+
+	if mirrorBucketsToBuckets {
 		// Synchronize buckets using dirDifference function
 		for d := range dirDifference(ctx, srcClt, dstClt, srcURL, dstURL) {
 			if d.Error != nil {
@@ -797,33 +799,42 @@ func runMirror(ctx context.Context, cancelMirror context.CancelFunc, srcURL, dst
 			newDstClt, _ := newClient(newTgtURL)
 
 			if d.Diff == differInFirst {
-				withLock := false
-				_, mode, validity, unit, err := newSrcClt.GetObjectLockConfig(ctx)
-				if err == nil {
-					withLock = true
+				var (
+					withLock bool
+					mode     minio.RetentionMode
+					validity uint64
+					unit     minio.ValidityUnit
+					err      *probe.Error
+				)
+				if preserve && mirrorBucketsToBuckets {
+					_, mode, validity, unit, err = newSrcClt.GetObjectLockConfig(ctx)
+					if err == nil {
+						withLock = true
+					}
 				}
 				// Bucket only exists in the source, create the same bucket in the destination
 				if err := newDstClt.MakeBucket(ctx, cli.String("region"), false, withLock); err != nil {
 					errorIf(err, "Unable to create bucket at `"+newTgtURL+"`.")
 					continue
 				}
-				// object lock configuration set on bucket
-				if mode != "" {
-					err = newDstClt.SetObjectLockConfig(ctx, mode, validity, unit)
-					errorIf(err,
-						"Unable to set object lock config in `"+newTgtURL+"`.")
-					if err != nil && mj.opts.activeActive {
-						return true
+				if preserve && mirrorBucketsToBuckets {
+					// object lock configuration set on bucket
+					if mode != "" {
+						err = newDstClt.SetObjectLockConfig(ctx, mode, validity, unit)
+						errorIf(err, "Unable to set object lock config in `"+newTgtURL+"`.")
+						if err != nil && mj.opts.activeActive {
+							return true
+						}
+						if err == nil {
+							mj.opts.md5 = true
+						}
 					}
-					if err == nil {
-						mj.opts.md5 = true
-					}
+					errorIf(copyBucketPolicies(ctx, newSrcClt, newDstClt, isOverwrite),
+						"Unable to copy bucket policies to `"+newDstClt.GetURL().String()+"`.")
 				}
-				errorIf(copyBucketPolicies(ctx, newSrcClt, newDstClt, isOverwrite),
-					"Unable to copy bucket policies to `"+newDstClt.GetURL().String()+"`.")
 			}
 
-			if mj.opts.isWatch {
+			if mirrorSrcBuckets && mj.opts.isWatch {
 				// monitor mode will watch the source folders for changes,
 				// and queue them for copying.
 				if err := mj.watchURL(ctx, newSrcClt); err != nil {
@@ -836,10 +847,18 @@ func runMirror(ctx context.Context, cancelMirror context.CancelFunc, srcURL, dst
 			}
 		}
 	} else if _, err := dstClt.Stat(ctx, StatOptions{}); err != nil {
-		withLock := false
-		_, mode, validity, unit, err := srcClt.GetObjectLockConfig(ctx)
-		if err == nil {
-			withLock = true
+		var (
+			withLock bool
+			mode     minio.RetentionMode
+			validity uint64
+			unit     minio.ValidityUnit
+			err      *probe.Error
+		)
+		if preserve {
+			_, mode, validity, unit, err = srcClt.GetObjectLockConfig(ctx)
+			if err == nil {
+				withLock = true
+			}
 		}
 
 		if dstClt.GetURL().Path == string(dstClt.GetURL().Separator) {
@@ -878,26 +897,25 @@ func runMirror(ctx context.Context, cancelMirror context.CancelFunc, srcURL, dst
 			}
 		}
 
-		// object lock configuration set on bucket
-		if mode != "" {
-			err = dstClt.SetObjectLockConfig(ctx, mode, validity, unit)
-			errorIf(err, "Unable to set object lock config in `"+dstURL+"`.")
-			if err != nil && mj.opts.activeActive {
-				return true
+		if preserve {
+			if mode != "" {
+				// object lock configuration set on bucket
+				err = dstClt.SetObjectLockConfig(ctx, mode, validity, unit)
+				errorIf(err, "Unable to set object lock config in `"+dstURL+"`.")
+				if err != nil && mj.opts.activeActive {
+					return true
+				}
+				if err == nil {
+					mj.opts.md5 = true
+				}
 			}
-			if err == nil {
-				mj.opts.md5 = true
-			}
-		}
 
-		err = copyBucketPolicies(ctx, srcClt, dstClt, isOverwrite)
-		errorIf(err, "Unable to copy bucket policies to `"+dstClt.GetURL().String()+"`.")
-		if err != nil && mj.opts.activeActive {
-			return true
+			errorIf(copyBucketPolicies(ctx, srcClt, dstClt, isOverwrite),
+				"Unable to copy bucket policies to `"+dstClt.GetURL().String()+"`.")
 		}
 	}
 
-	if !mirrorAllBuckets && mj.opts.isWatch {
+	if !mirrorSrcBuckets && mj.opts.isWatch {
 		// monitor mode will watch the source folders for changes,
 		// and queue them for copying.
 		if err := mj.watchURL(ctx, srcClt); err != nil {
