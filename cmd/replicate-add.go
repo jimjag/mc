@@ -72,31 +72,30 @@ var replicateAddCmd = cli.Command{
 	Before: setGlobalsFromContext,
 	Flags:  append(globalFlags, replicateAddFlags...),
 	CustomHelpTemplate: `NAME:
-	{{.HelpName}} - {{.Usage}}
-	  
-USAGE:
-	{{.HelpName}} TARGET
-	  
-FLAGS:
-	{{range .VisibleFlags}}{{.}}
-	{{end}}
-EXAMPLES:
-	1. Add replication configuration rule on bucket "mybucket" for alias "myminio" to replicate
-	   all objects with tags key1=value1, key2=value2 to destbucket, including delete markers and 
-	   versioned deletes.
-	   {{.Prompt}} {{.HelpName}} myminio/mybucket/prefix --tags "key1=value1&key2=value2" \ 
-														 --storage-class "STANDARD" \
-														 --arn 'arn:minio:replication::c5be6b16-769d-432a-9ef1-4567081f3566:destbucket' \
-														 --priority 1 \
-														 --remote-bucket "destbucket"
-														 --replicate "delete,delete-marker"
+ {{.HelpName}} - {{.Usage}}
 
-	2. Add replication configuration rule with Disabled status on bucket "mybucket" for alias "myminio".
-      {{.Prompt}} {{.HelpName}} myminio/mybucket/prefix --tags "key1=value1&key2=value2" \ 
-														--storage-class "STANDARD" --disable \
-														--arn 'arn:minio:replica::c5be6b16-769d-432a-9ef1-4567081f3566:destbucket' \
-														--priority 1 \
-														--remote-bucket "destbucket"
+USAGE:
+ {{.HelpName}} TARGET
+
+FLAGS:
+ {{range .VisibleFlags}}{{.}}
+ {{end}}
+EXAMPLES:
+ 1. Add replication configuration rule on bucket "mybucket" for alias "myminio" to replicate all objects with tags
+    "key1=value1, key2=value2" to destbucket, including delete markers and versioned deletes.
+    {{.Prompt}} {{.HelpName}} myminio/mybucket/prefix --tags "key1=value1&key2=value2" \
+         --storage-class "STANDARD" \
+         --arn 'arn:minio:replication::c5be6b16-769d-432a-9ef1-4567081f3566:destbucket' \
+         --priority 1 \
+         --remote-bucket "destbucket"
+         --replicate "delete,delete-marker"
+
+ 2. Add replication configuration rule with Disabled status on bucket "mybucket" for alias "myminio".
+    {{.Prompt}} {{.HelpName}} myminio/mybucket/prefix --tags "key1=value1&key2=value2" \
+        --storage-class "STANDARD" --disable \
+        --arn 'arn:minio:replica::c5be6b16-769d-432a-9ef1-4567081f3566:destbucket' \
+        --priority 1 \
+        --remote-bucket "destbucket"
 `,
 }
 
@@ -104,6 +103,12 @@ EXAMPLES:
 func checkReplicateAddSyntax(ctx *cli.Context) {
 	if len(ctx.Args()) != 1 {
 		cli.ShowCommandHelpAndExit(ctx, "add", 1) // last argument is exit code
+	}
+	if ctx.String("arn") == "" {
+		fatal(errDummy().Trace(), "--arn flag needs to be specified.")
+	}
+	if ctx.String("remote-bucket") == "" {
+		fatal(errDummy().Trace(), "--remote-bucket flag needs to be specified.")
 	}
 }
 

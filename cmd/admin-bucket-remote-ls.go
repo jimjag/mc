@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/fatih/color"
 	"github.com/minio/cli"
@@ -84,8 +85,8 @@ func mainAdminBucketRemoteList(ctx *cli.Context) error {
 	// Get the alias parameter from cli
 	args := ctx.Args()
 	aliasedURL := args.Get(0)
+	aliasedURL = filepath.Clean(aliasedURL)
 	_, sourceBucket := url2Alias(aliasedURL)
-
 	// Create a new MinIO Admin Client
 	client, err := newAdminClient(aliasedURL)
 	fatalIf(err, "Unable to initialize admin connection.")
@@ -100,7 +101,7 @@ func printRemotes(ctx *cli.Context, urlStr string, targets []madmin.BucketTarget
 	maxURLLen := 10
 	maxTgtLen := 6
 	maxSrcLen := 6
-	maxLabelLen := 0
+	maxLabelLen := 5
 	if !globalJSON {
 		if len(targets) == 0 {
 			console.Print(console.Colorize("RemoteListEmpty", fmt.Sprintf("No remote targets found for `%s`. \n", urlStr)))
