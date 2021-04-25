@@ -270,6 +270,7 @@ var completeCmds = map[string]complete.Predictor{
 	"/replicate/rm":     s3Complete{deepLevel: 2},
 	"/replicate/export": s3Complete{deepLevel: 2},
 	"/replicate/import": s3Complete{deepLevel: 2},
+	"/replicate/status": s3Complete{deepLevel: 2},
 
 	"/tag/list":   s3Completer,
 	"/tag/remove": s3Completer,
@@ -338,6 +339,14 @@ var completeCmds = map[string]complete.Predictor{
 	"/admin/user/remove":  aliasCompleter,
 	"/admin/user/info":    aliasCompleter,
 	"/admin/user/policy":  aliasCompleter,
+
+	"/admin/user/svcacct/add":     aliasCompleter,
+	"/admin/user/svcacct/ls":      aliasCompleter,
+	"/admin/user/svcacct/rm":      aliasCompleter,
+	"/admin/user/svcacct/info":    aliasCompleter,
+	"/admin/user/svcacct/set":     aliasCompleter,
+	"/admin/user/svcacct/enable":  aliasCompleter,
+	"/admin/user/svcacct/disable": aliasCompleter,
 
 	"/admin/group/add":     aliasCompleter,
 	"/admin/group/disable": aliasCompleter,
