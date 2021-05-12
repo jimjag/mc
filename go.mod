@@ -12,11 +12,12 @@ require (
 	github.com/klauspost/compress v1.12.2
 	github.com/mattn/go-ieproxy v0.0.1
 	github.com/mattn/go-isatty v0.0.12
-	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/minio/cli v1.22.0
+	github.com/minio/colorjson v1.0.0
+	github.com/minio/filepath v1.0.0 // indirect
 	github.com/minio/madmin-go v1.0.2
 	github.com/minio/minio v0.0.0-20210422165109-3455f786faf0
-	github.com/minio/minio-go/v7 v7.0.11-0.20210407221404-ba867dba7ee1
+	github.com/minio/minio-go/v7 v7.0.11-0.20210511181606-0263c8eee163
 	github.com/minio/sha256-simd v1.0.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pkg/profile v1.3.0
@@ -33,4 +34,5 @@ require (
 	gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b
 	gopkg.in/h2non/filetype.v1 v1.0.5
 	gopkg.in/yaml.v2 v2.3.0
+	maze.io/x/duration v0.0.0-20160924141736-faac084b6075
 )
