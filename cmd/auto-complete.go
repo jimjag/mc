@@ -370,11 +370,15 @@ var completeCmds = map[string]complete.Predictor{
 	"/admin/kms/key/create": aliasCompleter,
 	"/admin/kms/key/status": aliasCompleter,
 
-	"/admin/subnet/health": aliasCompleter,
+	"/admin/subnet/health":   aliasCompleter,
+	"/admin/subnet/register": aliasCompleter,
 
 	"/admin/tier/add":  nil,
 	"/admin/tier/edit": nil,
 	"/admin/tier/ls":   nil,
+
+	"/admin/replicate/add":  aliasCompleter,
+	"/admin/replicate/info": aliasCompleter,
 
 	"/alias/set":    nil,
 	"/alias/list":   aliasCompleter,
