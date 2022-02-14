@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2021 MinIO, Inc.
+// Copyright (c) 2015-2022 MinIO, Inc.
 //
 // This file is part of MinIO Object Storage stack
 //
@@ -17,30 +17,27 @@
 
 package cmd
 
-import (
-	"github.com/minio/cli"
-	"github.com/minio/pkg/console"
-)
+import "github.com/minio/cli"
 
-var adminProfileSubcommands = []cli.Command{
-	adminProfileStartCmd,
-	adminProfileStopCmd,
+var replicateResyncSubcommands = []cli.Command{
+	replicateResyncStartCmd,
+	replicateResyncStatusCmd,
 }
 
-var adminProfileCmd = cli.Command{
-	Name:            "profile",
-	Usage:           "generate profile data for debugging purposes",
-	Action:          mainAdminProfile,
-	OnUsageError:    onUsageError,
+var replicateResyncCmd = cli.Command{
+	Name:            "resync",
+	Usage:           "replicate back all previously replicated objects",
+	HideHelpCommand: true,
+	Action:          mainReplicateResync,
 	Before:          setGlobalsFromContext,
 	Flags:           globalFlags,
-	Subcommands:     adminProfileSubcommands,
-	HideHelpCommand: true,
-	Hidden:          true,
+	Subcommands:     replicateResyncSubcommands,
+	Aliases:         []string{"reset"},
 }
 
-// mainAdminProfile is the handle for "mc admin profile" command.
-func mainAdminProfile(ctx *cli.Context) error {
-	console.Infoln("Please use 'mc support profile'")
+// mainReplicateResync is the handle for "mc replicate resync" command.
+func mainReplicateResync(ctx *cli.Context) error {
+	commandNotFound(ctx, replicateResyncSubcommands)
 	return nil
+	// Sub-commands like "status", "start", have their own main.
 }

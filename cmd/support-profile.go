@@ -19,21 +19,26 @@ package cmd
 
 import (
 	"github.com/minio/cli"
-	"github.com/minio/pkg/console"
 )
 
-var adminSpeedtestCmd = cli.Command{
-	Name:               "speedtest",
-	Usage:              "Run server side speed test",
-	Action:             mainAdminSpeedtest,
-	OnUsageError:       onUsageError,
-	Before:             setGlobalsFromContext,
-	HideHelpCommand:    true,
-	Hidden:             true,
-	CustomHelpTemplate: "Please use 'mc support perf'",
+var supportProfileSubcommands = []cli.Command{
+	supportProfileStartCmd,
+	supportProfileStopCmd,
 }
 
-func mainAdminSpeedtest(ctx *cli.Context) error {
-	console.Infoln("Please use 'mc support perf'")
+var supportProfileCmd = cli.Command{
+	Name:            "profile",
+	Usage:           "generate profile data for debugging",
+	Action:          mainSupportProfile,
+	OnUsageError:    onUsageError,
+	Before:          setGlobalsFromContext,
+	Flags:           globalFlags,
+	Subcommands:     supportProfileSubcommands,
+	HideHelpCommand: true,
+}
+
+// mainSupportProfile is the handle for "mc support profile" command.
+func mainSupportProfile(ctx *cli.Context) error {
+	commandNotFound(ctx, supportProfileSubcommands)
 	return nil
 }

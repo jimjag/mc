@@ -23,13 +23,16 @@ import (
 
 var supportSubcommands = []cli.Command{
 	supportRegisterCmd,
-	supportDiagCmd,
 	supportCallhomeCmd,
+	supportDiagCmd,
+	supportPerfCmd,
+	supportInspectCmd,
+	supportProfileCmd,
 }
 
 var supportCmd = cli.Command{
 	Name:            "support",
-	Usage:           "Support related commands",
+	Usage:           "support related commands",
 	Action:          mainSupport,
 	Before:          setGlobalsFromContext,
 	Flags:           globalFlags,
