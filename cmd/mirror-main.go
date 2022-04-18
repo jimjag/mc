@@ -103,11 +103,11 @@ var (
 		},
 		cli.StringFlag{
 			Name:  "older-than",
-			Usage: "filter object(s) older than L days, M hours and N minutes",
+			Usage: "filter object(s) older than value in duration string (e.g. 7d10h31s)",
 		},
 		cli.StringFlag{
 			Name:  "newer-than",
-			Usage: "filter object(s) newer than L days, M hours and N minutes",
+			Usage: "filter object(s) newer than value in duration string (e.g. 7d10h31s)",
 		},
 		cli.StringFlag{
 			Name:  "storage-class, sc",
@@ -946,6 +946,16 @@ func runMirror(ctx context.Context, cancelMirror context.CancelFunc, srcURL, dst
 						withLock = true
 					}
 				}
+
+				mj.status.PrintMsg(mirrorMessage{
+					Source: newSrcURL,
+					Target: newTgtURL,
+				})
+
+				if mj.opts.isFake {
+					continue
+				}
+
 				// Bucket only exists in the source, create the same bucket in the destination
 				if err := newDstClt.MakeBucket(ctx, cli.String("region"), false, withLock); err != nil {
 					errorIf(err, "Unable to create bucket at `"+newTgtURL+"`.")
