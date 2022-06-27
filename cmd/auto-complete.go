@@ -403,20 +403,25 @@ var completeCmds = map[string]complete.Predictor{
 
 	"/admin/cluster/bucket/export": aliasCompleter,
 	"/admin/cluster/bucket/import": aliasCompleter,
+	"/admin/cluster/iam/export":    aliasCompleter,
+	"/admin/cluster/iam/import":    aliasCompleter,
 
 	"/alias/set":    nil,
 	"/alias/list":   aliasCompleter,
 	"/alias/remove": aliasCompleter,
 	"/alias/import": nil,
 
-	"/support/callhome": aliasCompleter,
-	"/support/logs":     aliasCompleter,
-	"/support/register": aliasCompleter,
-	"/support/diag":     aliasCompleter,
-	"/support/profile":  aliasCompleter,
-	"/support/inspect":  aliasCompleter,
-	"/support/perf":     aliasCompleter,
-	"/support/metrics":  aliasCompleter,
+	"/support/callhome":     aliasCompleter,
+	"/support/logs/enable":  aliasCompleter,
+	"/support/logs/disable": aliasCompleter,
+	"/support/logs/status":  aliasCompleter,
+	"/support/logs/show":    aliasCompleter,
+	"/support/register":     aliasCompleter,
+	"/support/diag":         aliasCompleter,
+	"/support/profile":      aliasCompleter,
+	"/support/inspect":      aliasCompleter,
+	"/support/perf":         aliasCompleter,
+	"/support/metrics":      aliasCompleter,
 
 	"/update": nil,
 }

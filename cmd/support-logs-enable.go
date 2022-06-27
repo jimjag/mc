@@ -17,15 +17,34 @@
 
 package cmd
 
-var (
-	// Version - version time.RFC3339.
-	Version = "DEVELOPMENT.GOGET"
-	// ReleaseTag - release tag in TAG.%Y-%m-%dT%H-%M-%SZ.
-	ReleaseTag = "DEVELOPMENT.GOGET"
-	// CommitID - latest commit id.
-	CommitID = "DEVELOPMENT.GOGET"
-	// ShortCommitID - first 12 characters from CommitID.
-	ShortCommitID = CommitID[:12]
-	// CopyrightYear - dynamic value of the copyright end year
-	CopyrightYear = "0000"
+import (
+	"github.com/minio/cli"
 )
+
+var supportLogsEnableCmd = cli.Command{
+	Name:            "enable",
+	Usage:           "enable uploading real-time MinIO logs to SUBNET",
+	Action:          mainEnableLogs,
+	OnUsageError:    onUsageError,
+	Before:          setGlobalsFromContext,
+	Flags:           logsConfigureFlags,
+	HideHelpCommand: true,
+	CustomHelpTemplate: `NAME:
+  {{.HelpName}} - {{.Usage}}
+USAGE:
+  {{.HelpName}} ALIAS
+FLAGS:
+  {{range .VisibleFlags}}{{.}}
+  {{end}}
+EXAMPLES:
+  1. Enable  uploading real-time logs for cluster with alias 'play' to SUBNET.
+     {{.Prompt}} {{.HelpName}} play
+`,
+}
+
+func mainEnableLogs(ctx *cli.Context) error {
+	setToggleMessageColor()
+	alias := validateLogsToggleCmd(ctx, "enable")
+	configureSubnetWebhook(alias, true)
+	return nil
+}

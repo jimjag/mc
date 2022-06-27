@@ -21,6 +21,7 @@ import "github.com/minio/cli"
 
 var adminClusterSubcommands = []cli.Command{
 	adminClusterBucketCmd,
+	adminClusterIAMCmd,
 }
 
 var adminClusterCmd = cli.Command{

@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2022 MinIO, Inc.
+// Copyright (c) 2022 MinIO, Inc.
 //
 // This file is part of MinIO Object Storage stack
 //
@@ -17,15 +17,26 @@
 
 package cmd
 
-var (
-	// Version - version time.RFC3339.
-	Version = "DEVELOPMENT.GOGET"
-	// ReleaseTag - release tag in TAG.%Y-%m-%dT%H-%M-%SZ.
-	ReleaseTag = "DEVELOPMENT.GOGET"
-	// CommitID - latest commit id.
-	CommitID = "DEVELOPMENT.GOGET"
-	// ShortCommitID - first 12 characters from CommitID.
-	ShortCommitID = CommitID[:12]
-	// CopyrightYear - dynamic value of the copyright end year
-	CopyrightYear = "0000"
-)
+import "github.com/minio/cli"
+
+var adminClusterIAMSubcommands = []cli.Command{
+	adminClusterIAMImportCmd,
+	adminClusterIAMExportCmd,
+}
+
+var adminClusterIAMCmd = cli.Command{
+	Name:            "iam",
+	Usage:           "manage IAM info on MinIO cluster",
+	Action:          mainadminClusterIAM,
+	Before:          setGlobalsFromContext,
+	Flags:           globalFlags,
+	Subcommands:     adminClusterIAMSubcommands,
+	HideHelpCommand: true,
+}
+
+// mainadminClusterIAM is the handle for "mc admin cluster bucket" command.
+func mainadminClusterIAM(ctx *cli.Context) error {
+	commandNotFound(ctx, adminClusterIAMSubcommands)
+	return nil
+	// Sub-commands like "export", "import" have their own main.
+}

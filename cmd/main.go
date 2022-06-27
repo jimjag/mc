@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2021 MinIO, Inc.
+// Copyright (c) 2015-2022 MinIO, Inc.
 //
 // This file is part of MinIO Object Storage stack
 //
@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"sort"
@@ -69,12 +70,12 @@ GLOBAL FLAGS:
 TIP:
   Use '{{.Name}} --autocompletion' to enable shell autocompletion
 
-VERSION:
-  ` + ReleaseTag +
-	`{{ "\n"}}{{range $key, $value := ExtraInfo}}
-{{$key}}:
-  {{$value}}
-{{end}}`
+COPYRIGHT:
+  Copyright (c) 2015-` + CopyrightYear + ` MinIO, Inc.
+
+LICENSE:
+  GNU AGPLv3 <https://www.gnu.org/licenses/agpl-3.0.html>
+`
 
 func init() {
 	if env.IsSet(mcEnvConfigFile) {
@@ -138,6 +139,25 @@ func Main(args []string) {
 	}
 }
 
+func flagValue(f cli.Flag) reflect.Value {
+	fv := reflect.ValueOf(f)
+	for fv.Kind() == reflect.Ptr {
+		fv = reflect.Indirect(fv)
+	}
+	return fv
+}
+
+func visibleFlags(fl []cli.Flag) []cli.Flag {
+	visible := []cli.Flag{}
+	for _, flag := range fl {
+		field := flagValue(flag).FieldByName("Hidden")
+		if !field.IsValid() || !field.Bool() {
+			visible = append(visible, flag)
+		}
+	}
+	return visible
+}
+
 // Function invoked when invalid flag is passed
 func onUsageError(ctx *cli.Context, err error, subcommand bool) error {
 	type subCommandHelp struct {
@@ -147,9 +167,10 @@ func onUsageError(ctx *cli.Context, err error, subcommand bool) error {
 
 	// Calculate the maximum width of the flag name field
 	// for a good looking printing
-	help := make([]subCommandHelp, len(ctx.Command.Flags))
+	vflags := visibleFlags(ctx.Command.Flags)
+	help := make([]subCommandHelp, len(vflags))
 	maxWidth := 0
-	for i, f := range ctx.Command.Flags {
+	for i, f := range vflags {
 		s := strings.Split(f.String(), "\t")
 		if len(s[0]) > maxWidth {
 			maxWidth = len(s[0])
@@ -236,28 +257,6 @@ func migrate() {
 
 	// Migrate shared urls if any.
 	migrateShare()
-}
-
-// Get os/arch/platform specific information.
-// Returns a map of current os/arch/platform/memstats.
-func getSystemData() map[string]string {
-	host, e := os.Hostname()
-	fatalIf(probe.NewError(e), "Unable to determine the hostname.")
-
-	memstats := &runtime.MemStats{}
-	runtime.ReadMemStats(memstats)
-	mem := fmt.Sprintf("Used: %s | Allocated: %s | UsedHeap: %s | AllocatedHeap: %s",
-		pb.Format(int64(memstats.Alloc)).To(pb.U_BYTES),
-		pb.Format(int64(memstats.TotalAlloc)).To(pb.U_BYTES),
-		pb.Format(int64(memstats.HeapAlloc)).To(pb.U_BYTES),
-		pb.Format(int64(memstats.HeapSys)).To(pb.U_BYTES))
-	platform := fmt.Sprintf("Host: %s | OS: %s | Arch: %s", host, runtime.GOOS, runtime.GOARCH)
-	goruntime := fmt.Sprintf("Version: %s | CPUs: %s", runtime.Version(), strconv.Itoa(runtime.NumCPU()))
-	return map[string]string{
-		"PLATFORM": platform,
-		"RUNTIME":  goruntime,
-		"MEM":      mem,
-	}
 }
 
 // initMC - initialize 'mc'.
@@ -453,11 +452,21 @@ var appCmds = []cli.Command{
 	updateCmd,
 }
 
+func printMCVersion(c *cli.Context) {
+	fmt.Fprintf(c.App.Writer, "%s version %s (commit-id=%s)\n", c.App.Name, c.App.Version, CommitID)
+	fmt.Fprintf(c.App.Writer, "Runtime: %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	fmt.Fprintf(c.App.Writer, "Copyright (c) 2015-%s MinIO, Inc.\n", CopyrightYear)
+	fmt.Fprintf(c.App.Writer, "License GNU AGPLv3 <https://www.gnu.org/licenses/agpl-3.0.html>\n")
+}
+
 func registerApp(name string) *cli.App {
 	cli.HelpFlag = cli.BoolFlag{
 		Name:  "help, h",
 		Usage: "show help",
 	}
+
+	// Override default cli version printer
+	cli.VersionPrinter = printMCVersion
 
 	app := cli.NewApp()
 	app.Name = name
@@ -483,15 +492,8 @@ func registerApp(name string) *cli.App {
 	}
 
 	app.Before = registerBefore
-	app.ExtraInfo = func() map[string]string {
-		if globalDebug {
-			return getSystemData()
-		}
-		return make(map[string]string)
-	}
-
 	app.HideHelpCommand = true
-	app.Usage = "MinIO Client for cloud storage and filesystems."
+	app.Usage = "MinIO Client for object storage and filesystems."
 	app.Commands = appCmds
 	app.Author = "MinIO, Inc."
 	app.Version = ReleaseTag
