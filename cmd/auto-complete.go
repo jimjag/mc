@@ -323,14 +323,16 @@ var completeCmds = map[string]complete.Predictor{
 	"/admin/decommission/status": aliasCompleter,
 	"/admin/decommission/cancel": aliasCompleter,
 
-	"/admin/trace":       aliasCompleter,
-	"/admin/speedtest":   aliasCompleter,
-	"/admin/console":     aliasCompleter,
-	"/admin/update":      aliasCompleter,
-	"/admin/inspect":     s3Completer,
-	"/admin/top/locks":   aliasCompleter,
-	"/admin/top/api":     aliasCompleter,
-	"/admin/top/scanner": aliasCompleter,
+	"/admin/trace":     aliasCompleter,
+	"/admin/speedtest": aliasCompleter,
+	"/admin/console":   aliasCompleter,
+	"/admin/update":    aliasCompleter,
+	"/admin/inspect":   s3Completer,
+	"/admin/top/locks": aliasCompleter,
+	"/admin/top/api":   aliasCompleter,
+
+	"/admin/scanner/info":  aliasCompleter,
+	"/admin/scanner/trace": aliasCompleter,
 
 	"/admin/service/stop":     aliasCompleter,
 	"/admin/service/restart":  aliasCompleter,
@@ -429,6 +431,9 @@ var completeCmds = map[string]complete.Predictor{
 	"/support/perf":         aliasCompleter,
 	"/support/metrics":      aliasCompleter,
 	"/support/status":       aliasCompleter,
+
+	"/license/register": aliasCompleter,
+	"/license/info":     aliasCompleter,
 
 	"/update": nil,
 	"/ready":  nil,
