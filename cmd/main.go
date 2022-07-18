@@ -435,6 +435,7 @@ var appCmds = []cli.Command{
 	retentionCmd,
 	legalHoldCmd,
 	supportCmd,
+	licenseCmd,
 	shareCmd,
 	versionCmd,
 	ilmCmd,
@@ -451,6 +452,7 @@ var appCmds = []cli.Command{
 	configCmd,
 	updateCmd,
 	readyCmd,
+	pingCmd,
 }
 
 func printMCVersion(c *cli.Context) {
