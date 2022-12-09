@@ -18,50 +18,50 @@
 package cmd
 
 import (
+	"github.com/fatih/color"
 	"github.com/minio/cli"
 	"github.com/minio/madmin-go/v2"
 	"github.com/minio/mc/pkg/probe"
+	"github.com/minio/pkg/console"
 )
 
-var adminIDPOpenidRemoveCmd = cli.Command{
-	Name:         "remove",
-	Usage:        "remove OpenID IDP server configuration",
-	Action:       mainAdminIDPOpenIDRemove,
+var quotaClearCmd = cli.Command{
+	Name:         "clear",
+	Usage:        "clear bucket quota",
+	Action:       mainQuotaClear,
+	OnUsageError: onUsageError,
 	Before:       setGlobalsFromContext,
 	Flags:        globalFlags,
-	OnUsageError: onUsageError,
 	CustomHelpTemplate: `NAME:
   {{.HelpName}} - {{.Usage}}
 
 USAGE:
-  {{.HelpName}} TARGET [CFG_NAME]
+  {{.HelpName}} TARGET
 
 FLAGS:
   {{range .VisibleFlags}}{{.}}
   {{end}}
 EXAMPLES:
-  1. Remove the default OpenID IDP configuration (CFG_NAME is omitted).
-     {{.Prompt}} {{.HelpName}} play/
-  2. Remove OpenID IDP configuration named "dex_test".
-     {{.Prompt}} {{.HelpName}} play/ dex_test
+  1. Clear bucket quota configured for bucket "mybucket" on MinIO.
+     {{.Prompt}} {{.HelpName}} myminio/mybucket
 `,
 }
 
-func mainAdminIDPOpenIDRemove(ctx *cli.Context) error {
-	if len(ctx.Args()) < 1 || len(ctx.Args()) > 2 {
-		showCommandHelpAndExit(ctx, 1)
+// checkQuotaClearSyntax - validate all the passed arguments
+func checkQuotaClearSyntax(ctx *cli.Context) {
+	if len(ctx.Args()) == 0 || len(ctx.Args()) > 1 {
+		showCommandHelpAndExit(ctx, 1) // last argument is exit code
 	}
-
-	args := ctx.Args()
-
-	var cfgName string
-	if len(args) == 2 {
-		cfgName = args.Get(1)
-	}
-	return adminIDPRemove(ctx, true, cfgName)
 }
 
-func adminIDPRemove(ctx *cli.Context, isOpenID bool, cfgName string) error {
+// mainQuotaClear is the handler for "mc quota clear" command.
+func mainQuotaClear(ctx *cli.Context) error {
+	checkQuotaClearSyntax(ctx)
+
+	console.SetColor("QuotaMessage", color.New(color.FgGreen))
+	console.SetColor("QuotaInfo", color.New(color.FgCyan))
+
+	// Get the alias parameter from cli
 	args := ctx.Args()
 	aliasedURL := args.Get(0)
 
@@ -69,17 +69,14 @@ func adminIDPRemove(ctx *cli.Context, isOpenID bool, cfgName string) error {
 	client, err := newAdminClient(aliasedURL)
 	fatalIf(err, "Unable to initialize admin connection.")
 
-	idpType := madmin.LDAPIDPCfg
-	if isOpenID {
-		idpType = madmin.OpenidIDPCfg
+	_, targetURL := url2Alias(args[0])
+	if e := client.SetBucketQuota(globalContext, targetURL, &madmin.BucketQuota{}); e != nil {
+		fatalIf(probe.NewError(e).Trace(args...), "Unable to clear bucket quota config")
 	}
-
-	restart, e := client.DeleteIDPConfig(globalContext, idpType, cfgName)
-	fatalIf(probe.NewError(e), "Unable to remove %s IDP config '%s'", idpType, cfgName)
-
-	printMsg(configSetMessage{
-		targetAlias: aliasedURL,
-		restart:     restart,
+	printMsg(quotaMessage{
+		op:     ctx.Command.Name,
+		Bucket: targetURL,
+		Status: "success",
 	})
 
 	return nil

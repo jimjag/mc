@@ -52,6 +52,7 @@ import (
 
 	"github.com/minio/mc/pkg/deadlineconn"
 	"github.com/minio/mc/pkg/httptracer"
+	"github.com/minio/mc/pkg/limiter"
 	"github.com/minio/mc/pkg/probe"
 )
 
@@ -145,6 +146,7 @@ func newFactory() func(config *Config) (Client, *probe.Error) {
 				hostName = googleHostName
 			}
 		}
+
 		// Generate a hash out of s3Conf.
 		confHash := fnv.New32a()
 		confHash.Write([]byte(hostName + config.AccessKey + config.SecretKey + config.SessionToken))
@@ -210,6 +212,8 @@ func newFactory() func(config *Config) (Client, *probe.Error) {
 				}
 				transport = tr
 			}
+
+			transport = limiter.New(config.UploadLimit, config.DownloadLimit, transport)
 
 			if config.Debug {
 				if strings.EqualFold(config.Signature, "S3v4") {
@@ -1406,7 +1410,7 @@ func (c *S3Client) RemoveBucket(ctx context.Context, forceRemove bool) *probe.Er
 		return probe.NewError(BucketInvalid{c.joinPath(bucket, object)})
 	}
 
-	opts := minio.BucketOptions{ForceDelete: forceRemove}
+	opts := minio.RemoveBucketOptions{ForceDelete: forceRemove}
 	if e := c.api.RemoveBucketWithOptions(ctx, bucket, opts); e != nil {
 		return probe.NewError(e)
 	}
@@ -1596,13 +1600,9 @@ func (c *S3Client) Stat(ctx context.Context, opts StatOptions) (*ClientContent, 
 	//     - /path/to/directory_marker
 	//     - /path/to/directory_marker/
 
-	// First an HEAD call is issued, this is faster than doing listing even if the object exists
-	// because the list could be very large. At the same time, the HEAD call is avoided if the
-	// object already contains a trailing prefix or we passed rewind flag to know the object version
-	// created just before the rewind parameter.
+	// Start with a HEAD request first to return object metadata information.
+	// If the object is not found, continue to look for a directory marker or a prefix
 	if !strings.HasSuffix(path, string(c.targetURL.Separator)) && opts.timeRef.IsZero() {
-		// Issue HEAD request first but ignore no such key error
-		// so we can check if there is such prefix which exists
 		o := minio.StatObjectOptions{ServerSideEncryption: opts.sse, VersionID: opts.versionID}
 		if opts.isZip {
 			o.Set("x-minio-extract", "true")
@@ -1611,16 +1611,11 @@ func (c *S3Client) Stat(ctx context.Context, opts StatOptions) (*ClientContent, 
 		if err == nil {
 			return ctnt, nil
 		}
-
 		// Ignore object missing error but return for other errors
 		if !errors.As(err.ToGoError(), &ObjectMissing{}) && !errors.As(err.ToGoError(), &ObjectIsDeleteMarker{}) {
 			return nil, err
 		}
-	}
-
-	// No object found, start looking for a prefix with the same name
-	// or a directory marker. Add a trailing slash if it is not in the path
-	if !strings.HasSuffix(path, string(c.targetURL.Separator)) {
+		// The object is not found, look for a directory marker or a prefix
 		path += string(c.targetURL.Separator)
 	}
 
