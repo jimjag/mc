@@ -20,18 +20,17 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/minio/mc/pkg/probe"
 	"github.com/minio/minio-go/v7"
 )
 
-// preparePutURLs - prepares target and source clientURLs for copying.
-func preparePutURLs(ctx context.Context, o prepareCopyURLsOpts) chan URLs {
+// prepareGetURLs - prepares target and source clientURLs for copying.
+func prepareGetURLs(ctx context.Context, o prepareCopyURLsOpts) chan URLs {
 	copyURLsCh := make(chan URLs)
 	go func(o prepareCopyURLsOpts) {
 		defer close(copyURLsCh)
-		copyURLsContent, err := guessPutURLType(ctx, o)
+		copyURLsContent, err := guessGetURLType(ctx, o)
 		if err != nil {
 			copyURLsCh <- URLs{Error: err}
 			return
@@ -62,9 +61,9 @@ func preparePutURLs(ctx context.Context, o prepareCopyURLsOpts) chan URLs {
 	return finalCopyURLsCh
 }
 
-// guessPutURLType guesses the type of clientURL. This approach all allows prepareURL
+// guessGetURLType guesses the type of clientURL. This approach all allows prepareURL
 // functions to accurately report failure causes.
-func guessPutURLType(ctx context.Context, o prepareCopyURLsOpts) (*copyURLsContent, *probe.Error) {
+func guessGetURLType(ctx context.Context, o prepareCopyURLsOpts) (*copyURLsContent, *probe.Error) {
 	cc := new(copyURLsContent)
 
 	// Extract alias before fiddling with the clientURL.
@@ -75,49 +74,40 @@ func guessPutURLType(ctx context.Context, o prepareCopyURLsOpts) (*copyURLsConte
 
 	if len(o.sourceURLs) == 1 { // 1 Source, 1 Target
 		var err *probe.Error
-		var client Client
-		client, cc.sourceContent, err = url2Stat(ctx, url2StatOptions{urlStr: cc.sourceURL, versionID: o.versionID, fileAttr: false, encKeyDB: o.encKeyDB, timeRef: o.timeRef, isZip: o.isZip, ignoreBucketExistsCheck: false})
-		if err != nil {
-			cc.copyType = copyURLsTypeInvalid
-			return cc, err
-		}
-		_, ok := client.(*fsClient)
-		if !ok {
-			cc.copyType = copyURLsTypeInvalid
-			return cc, probe.NewError(fmt.Errorf("Source is not local filepath."))
-		}
-		// If recursion is ON, it is type C.
-		// If source is a folder, it is Type C.
-		if cc.sourceContent.Type.IsDir() {
-			cc.copyType = copyURLsTypeC
-			return cc, nil
-		}
-		client, err = newClient(o.targetURL)
+
+		client, err := newClient(cc.sourceURL)
 		if err != nil {
 			cc.copyType = copyURLsTypeInvalid
 			return cc, err
 		}
 		s3clnt, ok := client.(*S3Client)
 		if !ok {
-			cc.copyType = copyURLsTypeInvalid
-			return cc, probe.NewError(fmt.Errorf("Target is not s3."))
+			return cc, probe.NewError(fmt.Errorf("Source is not s3."))
 		}
 		bucket, path := s3clnt.url2BucketAndObject()
 		if bucket == "" {
-			cc.copyType = copyURLsTypeInvalid
-			return cc, probe.NewError(fmt.Errorf("Bucket should not be empty."))
+			return cc, probe.NewError(fmt.Errorf("Please set bucket for s3 resource."))
 		}
-		cc.targetContent = s3clnt.objectInfo2ClientContent(bucket, minio.ObjectInfo{
-			Key: bucket,
-		})
-		// If target is a folder, it is Type B.
-		var isDir bool
 		if path == "" {
-			isDir = true
-		} else {
-			isDir = strings.HasSuffix(path, string(cc.targetContent.URL.Separator))
+			return cc, probe.NewError(fmt.Errorf("Please set a full path for s3 resource."))
+		}
+		cc.sourceContent = s3clnt.objectInfo2ClientContent(bucket, minio.ObjectInfo{
+			Key: path,
+		})
+
+		client, err = newClient(o.targetURL)
+		if err != nil {
+			cc.copyType = copyURLsTypeInvalid
+			return cc, err
+		}
+		_, ok = client.(*fsClient)
+		if !ok {
+			return cc, probe.NewError(fmt.Errorf("Target is not local filesystem."))
 		}
 
+		// If target is a folder, it is Type B.
+		var isDir bool
+		isDir, cc.targetContent = isAliasURLDir(ctx, o.targetURL, o.encKeyDB, o.timeRef, o.ignoreBucketExistsCheck)
 		if isDir {
 			cc.copyType = copyURLsTypeB
 			cc.sourceVersionID = cc.sourceContent.VersionID

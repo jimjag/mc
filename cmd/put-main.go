@@ -20,10 +20,12 @@ package cmd
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/dustin/go-humanize"
 	"github.com/minio/cli"
 	"github.com/minio/mc/pkg/probe"
+	"github.com/minio/pkg/v2/console"
 )
 
 // put command flags.
@@ -45,7 +47,7 @@ var (
 // Put command.
 var putCmd = cli.Command{
 	Name:         "put",
-	Usage:        "upload local object to s3 object storage",
+	Usage:        "upload an object to a bucket",
 	Action:       mainPut,
 	OnUsageError: onUsageError,
 	Before:       setGlobalsFromContext,
@@ -54,7 +56,7 @@ var putCmd = cli.Command{
   {{.HelpName}} - {{.Usage}}
 
 USAGE:
-  {{.HelpName}} [FLAGS] SOURCE [SOURCE...] TARGET
+  {{.HelpName}} [FLAGS] SOURCE TARGET
 
 FLAGS:
   {{range .VisibleFlags}}{{.}}
@@ -75,6 +77,11 @@ EXAMPLES:
 
 // mainPut is the entry point for put command.
 func mainPut(cliCtx *cli.Context) error {
+	args := cliCtx.Args()
+	if len(args) < 2 {
+		showCommandHelpAndExit(cliCtx, 1) // last argument is exit code.
+	}
+
 	ctx, cancelPut := context.WithCancel(globalContext)
 	defer cancelPut()
 	// part size
@@ -95,7 +102,6 @@ func mainPut(cliCtx *cli.Context) error {
 	encKeyDB, err := getEncKeys(cliCtx)
 	fatalIf(err, "Unable to parse encryption keys.")
 
-	args := cliCtx.Args()
 	if len(args) < 2 {
 		fatalIf(errInvalidArgument().Trace(args...), "Invalid number of arguments.")
 	}
@@ -115,6 +121,7 @@ func mainPut(cliCtx *cli.Context) error {
 	} else {
 		pg = newAccounter(totalBytes)
 	}
+	defer showLastProgressBar(pg)
 	go func() {
 		opts := prepareCopyURLsOpts{
 			sourceURLs:              sourceURLs,
@@ -125,7 +132,7 @@ func mainPut(cliCtx *cli.Context) error {
 
 		for putURLs := range preparePutURLs(ctx, opts) {
 			if putURLs.Error != nil {
-				printCopyURLsError(&putURLs)
+				printPutURLsError(&putURLs)
 				break
 			}
 			totalBytes += putURLs.SourceContent.Size
@@ -147,6 +154,33 @@ func mainPut(cliCtx *cli.Context) error {
 			if urls.Error != nil {
 				return urls.Error.ToGoError()
 			}
+		}
+	}
+}
+
+func printPutURLsError(putURLs *URLs) {
+	// Print in new line and adjust to top so that we
+	// don't print over the ongoing scan bar
+	if !globalQuiet && !globalJSON {
+		console.Eraseline()
+	}
+
+	if strings.Contains(putURLs.Error.ToGoError().Error(),
+		" is a folder.") {
+		errorIf(putURLs.Error.Trace(),
+			"Folder cannot be copied. Please use `...` suffix.")
+	} else {
+		errorIf(putURLs.Error.Trace(),
+			"Unable to upload.")
+	}
+}
+
+func showLastProgressBar(pg ProgressReader) {
+	if progressReader, ok := pg.(*progressBar); ok {
+		progressReader.ProgressBar.Finish()
+	} else {
+		if accntReader, ok := pg.(*accounter); ok {
+			printMsg(accntReader.Stat())
 		}
 	}
 }
