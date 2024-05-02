@@ -41,7 +41,7 @@ var globalFlags = []cli.Flag{
 	cli.BoolFlag{
 		Name:   "disable-pager, dp",
 		Usage:  "disable mc internal pager and print to raw stdout",
-		EnvVar: envPrefix + "DISABLE_PAGER",
+		EnvVar: envPrefix + globalDisablePagerEnv,
 		Hidden: true,
 	},
 	cli.BoolFlag{
@@ -88,16 +88,26 @@ var globalFlags = []cli.Flag{
 	},
 }
 
-// Flags common across all I/O commands such as cp, mirror, stat, pipe etc.
-var ioFlags = []cli.Flag{
-	cli.StringFlag{
-		Name:   "encrypt-key",
-		Usage:  "encrypt/decrypt objects (using server-side encryption with customer provided keys)",
-		EnvVar: envPrefix + "ENCRYPT_KEY",
-	},
-	cli.StringFlag{
-		Name:   "encrypt",
-		Usage:  "encrypt/decrypt objects (using server-side encryption with server managed keys)",
-		EnvVar: envPrefix + "ENCRYPT",
-	},
+// bundled encryption flags
+var encFlags = []cli.Flag{
+	encCFlag,
+	encKSMFlag,
+	encS3Flag,
+}
+
+var encCFlag = cli.StringSliceFlag{
+	Name:  "enc-c",
+	Usage: "encrypt/decrypt objects using client provided keys. (multiple keys can be provided) Format: Raw base64 encoding.",
+}
+
+var encKSMFlag = cli.StringSliceFlag{
+	Name:   "enc-kms",
+	Usage:  "encrypt/decrypt objects using specific server-side encryption keys. (multiple keys can be provided)",
+	EnvVar: envPrefix + "ENC_KMS",
+}
+
+var encS3Flag = cli.StringSliceFlag{
+	Name:   "enc-s3",
+	Usage:  "encrypt/decrypt objects using server-side default keys and configurations. (multiple keys can be provided).",
+	EnvVar: envPrefix + "ENC_S3",
 }
